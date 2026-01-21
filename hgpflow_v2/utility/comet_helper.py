@@ -9,77 +9,76 @@ if TYPE_CHECKING:
 import warnings
 
 
+from typing import Optional, Any
+from pytorch_lightning.loggers import CometLogger
+from comet_ml import Experiment, ExistingExperiment, OfflineExperiment
+
 class CometLoggerCustom(CometLogger):
-    '''
-    I just wanna manually set the experiment keys. comet allows it, but lightning doesn't
-    '''
-    def __init__(self, api_key: Optional[str] = None, save_dir: Optional[str] = None,
-        project_name: Optional[str] = None, rest_api_key: Optional[str] = None,
-        experiment_name: Optional[str] = None, experiment_key: Optional[str] = None,
-        offline: bool = False, prefix: str = "",
-        experiment_key_custom: Optional[str] = None, # custom addition
+    """
+    Custom CometLogger that supports manually setting experiment keys,
+    works with latest comet_ml and Lightning.
+    """
+    def __init__(
+        self,
+        api_key: Optional[str] = None,
+        project: Optional[str] = None,
+        name: Optional[str] = None,
+        experiment_key_custom: Optional[str] = None,  # custom addition
+        online: bool = True,  # use online=False for offline
+        offline_dir: Optional[str] = None,  # directory for offline logging
         **kwargs: Any,
     ):
-        super().__init__(api_key, save_dir, project_name, rest_api_key, experiment_name, offline, prefix, **kwargs)
+        super().__init__(
+            api_key=api_key,
+            project=project,
+            name=name,
+            online=online,
+            **kwargs
+        )
+        self._offline_dir = offline_dir
         self._experiment_key_custom = experiment_key_custom
 
-    
     @property
-    @rank_zero_experiment
-    def experiment(self) -> Union["Experiment", "ExistingExperiment", "OfflineExperiment"]:
-        r"""Actual Comet object. To use Comet features in your :class:`~pytorch_lightning.core.LightningModule` do the
-        following.
-
-        Example::
-
-            self.logger.experiment.some_comet_function()
-
+    def experiment(self):
         """
-        if self._experiment is not None and self._experiment.alive:
+        Returns the underlying Comet Experiment object.
+        Creates it if it doesn't exist yet.
+        """
+        if self._experiment is not None and getattr(self._experiment, "alive", True):
             return self._experiment
 
-        if self._future_experiment_key is not None:
-            os.environ["COMET_EXPERIMENT_KEY"] = self._future_experiment_key
+        # Decide which type of experiment to create
+        from comet_ml import Experiment, ExistingExperiment, OfflineExperiment
 
-        from comet_ml import ExistingExperiment, Experiment, OfflineExperiment
-
-        try:
-            if self.mode == "online":
-                if self._experiment_key is None:
-                    self._experiment = Experiment(api_key=self.api_key, project_name=self._project_name, **self._kwargs)
-                    self._experiment_key = self._experiment.get_key()
-                else:
-                    # custom addition
-                    if self._experiment_key_custom is not None:
-                        self._experiment = Experiment(
-                            api_key=self.api_key,
-                            project_name=self._project_name,
-                            experiment_key=self._experiment_key_custom,
-                            **self._kwargs,
-                        )
-                    else:
-                        self._experiment = ExistingExperiment(
-                            api_key=self.api_key,
-                            project_name=self._project_name,
-                            previous_experiment=self._experiment_key,
-                            **self._kwargs,
-                        )
-            else:
-                self._experiment = OfflineExperiment(
-                    offline_directory=self.save_dir, project_name=self._project_name, **self._kwargs
+        if self.online:
+            if self._experiment_key_custom is not None:
+                # Create experiment with custom key
+                self._experiment = Experiment(
+                    api_key=self.api_key,
+                    project_name=self._project,
+                    experiment_key=self._experiment_key_custom,
+                    **self._kwargs
                 )
-            self._experiment.log_other("Created from", "pytorch-lightning")
-        finally:
-            if self._future_experiment_key is not None:
-                os.environ.pop("COMET_EXPERIMENT_KEY")
-                self._future_experiment_key = None
+            else:
+                self._experiment = Experiment(
+                    api_key=self.api_key,
+                    project_name=self._project,
+                    **self._kwargs
+                )
+        else:
+            self._experiment = OfflineExperiment(
+                offline_directory=self._offline_dir,
+                project_name=self._project,
+                **self._kwargs
+            )
 
-        if self._experiment_name:
-            self._experiment.set_name(self._experiment_name)
+        # Set experiment name if provided
+        if getattr(self, "_name", None):
+            self._experiment.set_name(self._name)
 
+        # Log that Lightning created this experiment
+        self._experiment.log_other("Created from", "pytorch-lightning")
         return self._experiment
-
-
 
 
 def save_plot(fig, name, comet_logger=None):

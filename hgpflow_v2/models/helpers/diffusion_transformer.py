@@ -3,6 +3,16 @@ from torch import nn
 from .dense import Dense
 from .utils import padded_to_packed, packed_to_padded
 
+def _flash_attn_available():
+    if not torch.cuda.is_available():
+        return False
+    try:
+        import flash_attn  # noqa: F401
+        return True
+    except Exception:
+        return False
+
+
 def modulate(x, shift, scale):
     return x * (1 + scale.unsqueeze(1)) + shift.unsqueeze(1)
 
@@ -12,15 +22,27 @@ class DiTLayer(nn.Module):
         super().__init__()
         self.embed_dim = embed_dim
 
-        self.enable_flash_attn = mha_config.get('enable_flash_attn', False)
+        requested_flash = mha_config.get('enable_flash_attn', False)
         mha_config.pop('enable_flash_attn', None)
-        if self.enable_flash_attn:
+        
+        use_flash = requested_flash and _flash_attn_available()
+        
+        if requested_flash and not use_flash:
+            print(
+                "[INFO] FlashAttention requested but not available. "
+                "Falling back to standard attention."
+            )
+        
+        if use_flash:
             from .attention_flash_varlen import MultiheadFlashAttentionVarLen
+            self.enable_flash_attn = True
             self.mha = MultiheadFlashAttentionVarLen(embed_dim, **mha_config)
         else:
             from .attention import MultiheadAttention, ScaledDotProductAttention
+            self.enable_flash_attn = False
             mha_config['attention'] = ScaledDotProductAttention()
             self.mha = MultiheadAttention(embed_dim, **mha_config)
+
 
         if dense_config:
             dense_config['input_dim'] = embed_dim

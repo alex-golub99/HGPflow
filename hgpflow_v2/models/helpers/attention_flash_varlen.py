@@ -1,7 +1,13 @@
 import torch
 from torch import nn
 import torch.nn.functional as F
-from flash_attn import flash_attn_varlen_qkvpacked_func
+try:
+    from flash_attn import flash_attn_varlen_qkvpacked_func
+    _FLASH_ATTN_AVAILABLE = True
+except Exception:
+    flash_attn_varlen_qkvpacked_func = None
+    _FLASH_ATTN_AVAILABLE = False
+
 
 class MultiheadFlashAttentionVarLen(nn.Module):
     def __init__(self, 
@@ -15,6 +21,13 @@ class MultiheadFlashAttentionVarLen(nn.Module):
         # Check that the dimension of each heads makes internal sense
         if embed_dim % num_heads != 0:
             raise ValueError(f"embed_dim {embed_dim} must be divisible by num_heads {num_heads}")
+
+        if not _FLASH_ATTN_AVAILABLE:
+            raise RuntimeError(
+                "FlashAttention is not available. "
+                "This module requires flash-attn to be installed "
+                "with a working CUDA toolkit."
+            )
 
         self.embed_dim = embed_dim
         self.num_heads = num_heads
@@ -57,3 +70,32 @@ class MultiheadFlashAttentionVarLen(nn.Module):
 
         # Mix with final linear layer
         return self.out_proj(a_out)
+
+class MultiheadAttentionFallback(nn.Module):
+    def __init__(self, embed_dim, num_heads, bias=True, dropout=0.0):
+        super().__init__()
+        self.attn = nn.MultiheadAttention(
+            embed_dim=embed_dim,
+            num_heads=num_heads,
+            dropout=dropout,
+            bias=bias,
+            batch_first=True,
+        )
+
+    def forward(self, q, culens, maxlen):
+        # Convert varlen format to padded batch
+        # This assumes q is already flattened [sum(seq), dim]
+        # and culens is cumulative lengths
+        batch_size = len(culens) - 1
+        padded = torch.zeros(
+            batch_size, maxlen, q.size(-1),
+            device=q.device,
+            dtype=q.dtype,
+        )
+
+        for i in range(batch_size):
+            start, end = culens[i], culens[i + 1]
+            padded[i, : end - start] = q[start:end]
+
+        out, _ = self.attn(padded, padded, padded)
+        return out.reshape(-1, q.size(-1))
