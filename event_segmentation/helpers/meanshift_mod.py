@@ -6,6 +6,7 @@ from sklearn.cluster import MeanShift # , get_bin_seeds
 from sklearn.neighbors import NearestNeighbors
 from sklearn.utils.parallel import Parallel, delayed
 from sklearn.utils import check_array, check_random_state, gen_batches
+from sklearn.utils.validation import validate_data
 
 import numpy as np
 
@@ -185,7 +186,7 @@ class MeanShiftMod(MeanShift):
         if np.isnan(X).any():
             warnings.warn("Input contains NaNs. Replacing them with zeros...")
             X = np.nan_to_num(X)
-        X = self._validate_data(X)
+        X = validate_data(self,X)
         bandwidth = self.bandwidth
         if bandwidth is None:
             bandwidth = estimate_bandwidth(X, n_jobs=self.n_jobs)
