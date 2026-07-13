@@ -1,0 +1,66 @@
+project_name: hgpflow_v2
+
+device: cuda
+num_devices: 4
+num_nodes: 4  # 16 ranks total -> global batch = 16 x 128 = 2048
+
+train_components: [hg_model] # hg_model | hyperedge | [hg_model, hyperedge]
+
+resume_from_checkpoint: null
+
+num_epochs: 25
+eval_every_n_epoch: 1
+
+batchsize_train: 128  # per rank
+batchsize_val: 256
+
+length_grouped_batching: true  # training only: sort-by-node-count batches to fill batch_size
+shard_files_by_rank: true  # 305 train files / 16 ranks = ~19 files per rank
+                           # (val has 10 files < 16 ranks -> falls back to full-load + striding; fine)
+
+profiler: null
+time_training_step: false
+trainer_precision: 32-true
+
+apply_cells_threshold: false # true | false
+n_cells_threshold: 3000
+
+
+run_name: largeqqbartraining4node
+path_train: |
+    glob.glob('/pscratch/sd/a/agolub/qqbar_events/split_train/*.root')
+path_val  : |
+    glob.glob('/pscratch/sd/a/agolub/qqbar_events/split_val/*.root')
+
+
+reduce_ds_train: -1
+reduce_ds_val: -1
+
+num_workers: 8  # per DDP rank
+n_ray: 0
+lsa_num_threads: 1
+
+# sqrt-scaling from the validated 3e-4 @ global 512: 4x batch -> 2x LR.
+# (linear scaling would say 1.2e-3; start conservative for an unattended run)
+learning_rate: 6.0e-4
+lr_scheduler:
+    name: CustomLRScheduler
+    warm_start_epochs: 0.0
+    cosine_epochs: 0.999 # doesn't like 1.0
+    eta_min: 5.0e-6
+    last_epoch: -1
+
+base_root_dir: /pscratch/sd/a/agolub/hgpflow_runs
+
+ind_loss_wt: 1.0
+inc_loss_wt: 1.0
+track_fix_wt: 1.e+5
+
+train_log_every_n_steps: 20
+n_event_displays: 5
+event_idxs_to_display: [0, 1, 29, 51, 52] # overwrites n_event_displays
+
+# things I am testing...
+do_consistent_match: true # true | false (paper)
+loss_discount_factor: "torch.ones(12)" # "torch.linspace(1.0, 0.2, num=16)" | "torch.ones(16)"
+random_bptt: false # true | false (false is from the paper)

@@ -47,7 +47,9 @@ def get_dataloader(dataset_type, ds_kwargs, sampler_kwargs, loader_kwargs):
                 n_cells_array=n_cells_array, n_cells_threshold=sampler_kwargs['n_cells_threshold'])
         else:
             batch_sampler = sampler_dict[dataset_type](
-                dataset.n_nodes, batch_size=sampler_kwargs['batch_size'], remove_idxs=remove_idxs)
+                dataset.n_nodes, batch_size=sampler_kwargs['batch_size'], remove_idxs=remove_idxs,
+                length_grouped=sampler_kwargs.get('length_grouped', False),
+                data_already_sharded=getattr(dataset, 'files_sharded', False))
 
 
     loader_kwargs['collate_fn'] = collate_fn

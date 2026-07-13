@@ -1,37 +1,46 @@
 project_name: hgpflow_v2
 
 device: cuda
-num_devices: 1
+num_devices: 4  # >1 enables DDP (strategy='ddp'); set back to 1 for single-GPU
+num_nodes: 4
 
 train_components: [hg_model] # hg_model | hyperedge | [hg_model, hyperedge]
 
 resume_from_checkpoint: null
 
-num_epochs: 100
+num_epochs: 30
 eval_every_n_epoch: 1
 
-batchsize_train: 128
+batchsize_train: 128  # length-grouped throughput test (was 128)
 batchsize_val: 256
+
+length_grouped_batching: true  # training only: sort-by-node-count batches to fill batch_size (was exact-node-count)
+shard_files_by_rank: true  # DDP: each rank loads only its slice of the file list (1/world load time+RAM)
+
+profiler: null  # null | simple | advanced | pytorch  (null = no profiler overhead; real wall-clock)
+time_training_step: false  # synchronized wall-clock timers for fwd/matching/backward (prints every 20 steps)
+trainer_precision: 32-true  # 32-true | bf16-mixed | 16-mixed  (bf16 tested SLOWER here: ops too small for tensor cores)
 
 apply_cells_threshold: false # true | false
 n_cells_threshold: 3000
 
 
-run_name: cocoaxminixv1x250kxs1
+run_name: largeqqbartraining
 path_train: |
-    glob.glob('path to cocoa/new_dijet_10_oct_2024/train_seg_250k/cocoa_dijet_chunk_*_seg_bw0.4.root')
+    glob.glob('/pscratch/sd/a/agolub/qqbar_events/split_train/*.root')
 path_val  : |
-    glob.glob('path to cocoa/new_dijet_10_oct_2024/val_seg_10k/cocoa_dijet_chunk_*_seg_bw0.4.root')
+    glob.glob('/pscratch/sd/a/agolub/qqbar_events/split_val/*.root')
 
 
+reduce_ds_train: -1  # profiling: enough to fill 512-size node-count buckets (was 2000). -1 = all (~8.5M)
+reduce_ds_val: -1     # sanity run: cap val examples. -1 = all
 
-reduce_ds_train: -1
-reduce_ds_val: -1
-
-num_workers: 9
+num_workers: 8  # per DDP rank! 4 ranks x 8 = 32 loader workers on a 64-core node (use 32 for single GPU)
 n_ray: 0
+lsa_num_threads: 1  # 1 = serial LAP (no thread pool); wall-clock A/B showed serial == threaded
 
-learning_rate: 1.0e-4
+# learning_rate: 1.5e-4
+learning_rate: 6.0e-4 # for 4 nodes  (NB: YAML needs the .0 -- '6e-4' parses as a string!)
 lr_scheduler:
     name: CustomLRScheduler
     warm_start_epochs: 0.0
@@ -39,7 +48,7 @@ lr_scheduler:
     eta_min: 5.0e-6
     last_epoch: -1
 
-base_root_dir: ...
+base_root_dir: /pscratch/sd/a/agolub/hgpflow_runs
 
 ind_loss_wt: 1.0
 inc_loss_wt: 1.0

@@ -5,6 +5,15 @@ from ..helpers.dense import Dense
 from ..helpers.diffusion_transformer import DiTEncoder
 
 
+def masked_mean(x, node_valid, dim=1):
+    """Mean over `dim` counting only valid nodes. node_valid=None (or all-True)
+    reproduces x.mean(dim) exactly, so this is a no-op for single-node-count batches."""
+    if node_valid is None:
+        return x.mean(dim=dim)
+    vf = node_valid.unsqueeze(-1).to(x.dtype)
+    return (x * vf).sum(dim=dim) / vf.sum(dim=dim).clamp(min=1.0)
+
+
 
 
 class IterativeRefiner(nn.Module):
@@ -26,7 +35,7 @@ class IterativeRefiner(nn.Module):
         self.edges_logsigma = nn.Parameter(torch.zeros(1, 1, self.d_hid))
         nn.init.xavier_uniform_(self.edges_logsigma)
 
-    def get_initial(self, inputs, track_mask, n_edges=None):
+    def get_initial(self, inputs, track_mask, node_valid=None, n_edges=None):
         b, n_v, _, device = *inputs.shape, inputs.device
         n_e = n_edges if n_edges is not None else self.n_edges
 
@@ -39,26 +48,28 @@ class IterativeRefiner(nn.Module):
 
         track_eye, ch_mask_from_tracks = self.refiner.get_track_eye(track_mask, i_t.shape)
         i_t = self.refiner.set_track(i_t, track_mask, track_eye)
+        if node_valid is not None:  # zero incidence on padded node columns
+            i_t = i_t * node_valid.unsqueeze(1).to(i_t.dtype)
         return e_t, v_t, i_t, track_eye, ch_mask_from_tracks
 
-    def refine(self, inputs, e_t, v_t, i_t, track_mask, track_eye, ch_mask_from_tracks, t_backprops):
+    def refine(self, inputs, e_t, v_t, i_t, track_mask, track_eye, ch_mask_from_tracks, t_backprops, node_valid=None):
         inputs = self.proj_inputs(inputs)
         pred_bp = []
 
         for t, do_bp in enumerate(t_backprops):
             if not do_bp:
                 with torch.no_grad():
-                    _, e_t, v_t, i_t = self.refiner(inputs, e_t, v_t, i_t, track_mask, track_eye, ch_mask_from_tracks)
+                    _, e_t, v_t, i_t = self.refiner(inputs, e_t, v_t, i_t, track_mask, track_eye, ch_mask_from_tracks, node_valid)
             else:
-                p, e_t, v_t, i_t = self.refiner(inputs, e_t, v_t, i_t, track_mask, track_eye, ch_mask_from_tracks)
+                p, e_t, v_t, i_t = self.refiner(inputs, e_t, v_t, i_t, track_mask, track_eye, ch_mask_from_tracks, node_valid)
                 pred_bp.append((t, p))
 
         return pred_bp, (e_t, v_t, i_t)
 
-    def forward(self, inputs, track_mask):
-        e_t, v_t, i_t, track_eye, ch_mask_from_tracks = self.get_initial(inputs, track_mask)
+    def forward(self, inputs, track_mask, node_valid=None):
+        e_t, v_t, i_t, track_eye, ch_mask_from_tracks = self.get_initial(inputs, track_mask, node_valid)
         return self.refine(
-            inputs, e_t, v_t, i_t, track_mask, track_eye, ch_mask_from_tracks, self.t_backprops_last)
+            inputs, e_t, v_t, i_t, track_mask, track_eye, ch_mask_from_tracks, self.t_backprops_last, node_valid=node_valid)
 
 
 
@@ -107,7 +118,7 @@ class HypergraphRefiner(nn.Module):
         return i_t # , track_eye
 
 
-    def forward(self, inputs, e_t, n_t, i_t, track_mask, track_eye, ch_mask_from_tracks):
+    def forward(self, inputs, e_t, n_t, i_t, track_mask, track_eye, ch_mask_from_tracks, node_valid=None):
         b_size, e_size, n_size = i_t.shape
 
         i_t = self.mlp_incidence((e_t, n_t, i_t)).squeeze(3) # B, n_hyperedge, n_node
@@ -118,8 +129,11 @@ class HypergraphRefiner(nn.Module):
         # hard coding the track part
         i_t = self.set_track(i_t, track_mask, track_eye)
 
+        if node_valid is not None:  # zero incidence on padded node columns so sums/einsums ignore them
+            i_t = i_t * node_valid.unsqueeze(1).to(i_t.dtype)
+
         # update the indicator
-        i_t_sum = i_t.sum(dim=2, keepdim=True) 
+        i_t_sum = i_t.sum(dim=2, keepdim=True)
         e_ind_logit = self.edge_indicator(torch.cat([e_t, i_t_sum], dim=2))
 
         # set the indicator equal to one for the track part
@@ -133,11 +147,11 @@ class HypergraphRefiner(nn.Module):
         updates_e = torch.einsum("ben,bnd->bed", im_t, n_t)
         e_t = self.transformer_e(
             q=torch.cat([e_t, updates_e], dim=-1),
-            context=inputs.mean(dim=1)    
+            context=masked_mean(inputs, node_valid, dim=1)
         )
 
         updates_n = torch.einsum("ben,bed->bnd", im_t, e_t)
-        n_t = self.norm_n(n_t + self.mlp_n(self.norm_pre_n(torch.cat([inputs, n_t, updates_n], dim=-1))))
+        n_t = self.norm_n(n_t + self.mlp_n(self.norm_pre_n(torch.cat([inputs, n_t, updates_n], dim=-1)), node_valid))
 
         pred_is_charged = track_eye.sum(dim=2).bool()
         pred = (i_t, e_ind_logit.squeeze(-1), pred_is_charged)
@@ -170,10 +184,17 @@ class DeepSet(nn.Module):
             layers.append(nn.LayerNorm(d_hids[i-1]))
             layers.append(DeepSetLayer(d_hids[i-1], d_hids[i]))
 
-        self.sequential = nn.Sequential(*layers)
+        # ModuleList (not Sequential) so we can thread node_valid to DeepSetLayers;
+        # attribute name 'sequential' + index keys are preserved for checkpoint compat.
+        self.sequential = nn.ModuleList(layers)
 
-    def forward(self, x):
-        return self.sequential(x)
+    def forward(self, x, node_valid=None):
+        for layer in self.sequential:
+            if isinstance(layer, DeepSetLayer):
+                x = layer(x, node_valid)
+            else:
+                x = layer(x)
+        return x
 
 
 class DeepSetLayer(nn.Module):
@@ -182,8 +203,8 @@ class DeepSetLayer(nn.Module):
         self.layer1 = nn.Linear(in_features, out_features)
         self.layer2 = nn.Linear(in_features, out_features)
 
-    def forward(self, x):
+    def forward(self, x, node_valid=None):
         x0 = self.layer1(x)
-        x1 = self.layer2(x - x.mean(dim=1, keepdim=True))
+        x1 = self.layer2(x - masked_mean(x, node_valid, dim=1).unsqueeze(1))
         x = x0 + x1
         return x

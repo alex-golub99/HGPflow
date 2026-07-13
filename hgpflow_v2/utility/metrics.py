@@ -4,6 +4,7 @@ import torch
 import torch.nn as nn
 import torch.nn.functional as F
 from scipy.optimize import linear_sum_assignment
+from concurrent.futures import ThreadPoolExecutor
 import os
 
 
@@ -57,12 +58,31 @@ class Metrics:
 
         self.do_consistent_match = config.get('do_consistent_match', False)
 
+        # scipy's linear_sum_assignment is single-threaded C (releases the GIL),
+        # so the per-sample LAP solves in get_lsa_indices can be run in parallel
+        # across a thread pool to keep the GPU fed instead of stalling on one core.
+        lsa_num_threads = config.get('lsa_num_threads', min(os.cpu_count() or 1, 128))
+        self._lsa_pool = ThreadPoolExecutor(max_workers=lsa_num_threads) \
+            if lsa_num_threads > 1 else None
 
-    def get_inc_and_ind_pdist(self, input, target, node_is_track):
+
+    def _ensure_device(self, device):
+        # constants are built with .cuda() (= cuda:0); under DDP each rank runs on its
+        # own cuda:N, so move them to the data's device on first use.
+        if self.INC_CONTWT_X is not None and self.INC_CONTWT_X.device != device:
+            self.INC_CONTWT_X = self.INC_CONTWT_X.to(device)
+            self.INC_CONTWT_Y = self.INC_CONTWT_Y.to(device)
+        if hasattr(self, 'discount_factor') and self.discount_factor.device != device:
+            self.discount_factor = self.discount_factor.to(device)
+
+    def get_inc_and_ind_pdist(self, input, target, node_is_track, node_valid=None):
+        self._ensure_device(target[0].device)
         '''
         Args:
             input : (input_inc  (b, ne, nv), input_ind  (b, ne), input_is_charged  (b, ne))
             target: (target_inc (b, ne, nv), target_ind (b, ne), target_is_charged (b, ne))
+            node_valid: (b, nv) bool; when given, the mean over nodes counts only valid
+                        nodes so padded columns don't dilute the cost (padding-invariant).
         '''
 
         input_inc, input_ind_logit, input_is_charged = input
@@ -95,13 +115,23 @@ class Metrics:
         # incidence loss (kld = -qlog(p))
         pdist_inc = - target_inc_reshaped * torch.log(input_inc_reshaped + self.EPS)
 
+        # mean over the node dim (3); mask out padded nodes so they don't dilute the mean
+        if node_valid is not None:
+            node_w = node_valid[:, None, None, :].to(pdist_inc.dtype)  # (b,1,1,nv)
+            node_denom = node_w.sum(3).clamp(min=1.0)
+            def node_mean(z):
+                return (z * node_w).sum(3) / node_denom
+        else:
+            def node_mean(z):
+                return z.mean(3)
+
         # for logging
         pdist_inc_unscaled = pdist_inc.clone().detach()
-        pdist_inc_unscaled = (pdist_inc_unscaled + track_fix_wt).mean(3)
+        pdist_inc_unscaled = node_mean(pdist_inc_unscaled + track_fix_wt)
 
         pdist_inc = pdist_inc * cont_wt
         pdist_inc = pdist_inc + track_fix_wt
-        pdist_inc = self.INC_LOSS_WT * pdist_inc.mean(3)
+        pdist_inc = self.INC_LOSS_WT * node_mean(pdist_inc)
 
         # indicator loss (bce with logits)
         pdist_ind = F.binary_cross_entropy_with_logits(
@@ -116,7 +146,8 @@ class Metrics:
 
 
     def get_lsa_indices(self, pdist, target_ind):
-        pdist_ = pdist.detach().cpu().numpy()
+        # .float() so numpy conversion works under bf16/16-mixed autocast (numpy has no bfloat16)
+        pdist_ = pdist.detach().float().cpu().numpy()
 
         b, n_part, _ = pdist.size()
         indices_torch = torch.arange(n_part).unsqueeze(0).unsqueeze(0).expand(b, 2, -1).clone() # step1
@@ -129,13 +160,25 @@ class Metrics:
                 pass                
             
         else:
-            for i, (p, ind) in enumerate(zip(pdist_, target_ind.cpu().numpy())):
-                ind_mask = ind == 1
-                row_ind, col_ind = linear_sum_assignment(p[ind_mask])
+            target_ind_np = target_ind.cpu().numpy()
+            ind_masks = [ind == 1 for ind in target_ind_np]
+
+            # only the scipy solve is parallelized (it releases the GIL);
+            # the torch index assembly below stays serial and cheap.
+            def _solve(i):
+                return linear_sum_assignment(pdist_[i][ind_masks[i]])[1]
+
+            if self._lsa_pool is not None:
+                col_inds = list(self._lsa_pool.map(_solve, range(b)))
+            else:
+                col_inds = [_solve(i) for i in range(b)]
+
+            for i, col_ind in enumerate(col_inds):
+                ind_mask = ind_masks[i]
                 col_ind = torch.from_numpy(col_ind)
 
                 indices_torch[i, 1, ind_mask] = col_ind # step2
-                
+
                 unmatched_mask = torch.full((n_part,), True)
                 unmatched_mask[col_ind] = False
                 indices_torch[i, 1, ~ind_mask] = _arange[unmatched_mask] # step3
@@ -171,7 +214,7 @@ class Metrics:
         return total_loss, loss_componenets, indices_to_return
 
 
-    def LAP_loss_single(self, input, target, node_is_track):
+    def LAP_loss_single(self, input, target, node_is_track, node_valid=None):
         '''
         Args:
             input : (input_inc  (b, ne, nv), input_ind_logit  (b, ne), input_is_charged  (b, ne))
@@ -179,12 +222,12 @@ class Metrics:
         '''
 
         pdist_inc, pdist_ind, pdist_inc_unscaled, pdist_ind_unscaled = \
-            self.get_inc_and_ind_pdist(input, target, node_is_track)
+            self.get_inc_and_ind_pdist(input, target, node_is_track, node_valid)
 
         return self.process_pdists(pdist_inc, pdist_ind, target[1], pdist_inc_unscaled, pdist_ind_unscaled)
 
 
-    def LAP_loss_multi(self, input_list, target, node_is_track):
+    def LAP_loss_multi(self, input_list, target, node_is_track, node_valid=None):
         '''
         Args:
             input_list : [(t, (input_inc  (b, ne, nv), input_ind_logit  (b, ne), input_is_charged  (b, ne))) t_bptt times]
@@ -192,16 +235,16 @@ class Metrics:
         '''
 
         if self.do_consistent_match:
-            return self.LAP_loss_multi_consistent_match(input_list, target, node_is_track)
+            return self.LAP_loss_multi_consistent_match(input_list, target, node_is_track, node_valid)
 
         else:
-            total_loss = 0; 
+            total_loss = 0;
             loss_componenets = {
                 'inc_loss': 0,
                 'ind_loss': 0
             }
             for t, input in input_list:
-                loss, loss_components, _ = self.LAP_loss_single(input, target, node_is_track)
+                loss, loss_components, _ = self.LAP_loss_single(input, target, node_is_track, node_valid)
                 total_loss += loss * self.discount_factor[t]
                 for k in loss_components.keys():
                     loss_componenets[k] += loss_components[k] * self.discount_factor[t]
@@ -213,7 +256,7 @@ class Metrics:
             return total_loss, loss_componenets, None
 
 
-    def LAP_loss_multi_consistent_match(self, input_list, target, node_is_track):
+    def LAP_loss_multi_consistent_match(self, input_list, target, node_is_track, node_valid=None):
         '''
         Args:
             input_list : [(t, (input_inc  (b, ne, nv), input_ind_logit  (b, ne), input_is_charged  (b, ne))) t_bptt times]
@@ -224,7 +267,7 @@ class Metrics:
         pdist_inc_unscaled, pdist_ind_unscaled = 0, 0
         for t, input in input_list:
             pdist_inc_t, pdist_ind_t, pdist_inc_unscaled_t, pdist_ind_unscaled_t = \
-                self.get_inc_and_ind_pdist(input, target, node_is_track)
+                self.get_inc_and_ind_pdist(input, target, node_is_track, node_valid)
             pdist_inc = pdist_inc + pdist_inc_t * self.discount_factor[t]
             pdist_ind = pdist_ind + pdist_ind_t * self.discount_factor[t]
             pdist_inc_unscaled += pdist_inc_unscaled_t * self.discount_factor[t]

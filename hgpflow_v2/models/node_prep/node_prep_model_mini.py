@@ -24,14 +24,21 @@ class NodePrepModelMini(nn.Module):
         topo_mask = batch['node']['is_topo'].unsqueeze(-1)
         node_feat = track_feat * track_mask + topo_feat * topo_mask
 
-        # transformer
-        node_global = node_feat.mean(dim=1) # there is no padding
+        # node-validity mask (True = real node, False = padding). All-True for
+        # single-node-count batches, so the masking below is a no-op there.
+        node_valid = batch['node']['is_track'] | batch['node']['is_topo']  # (b, n)
+
+        # transformer context: masked mean over valid nodes only
+        valid_f = node_valid.unsqueeze(-1).to(node_feat.dtype)
+        node_global = (node_feat * valid_f).sum(dim=1) / valid_f.sum(dim=1).clamp(min=1.0)
 
         # identify what's track and what's topo
         node_feat = torch.cat([
             node_feat, track_mask.float(), topo_mask.float()], dim=-1)
 
-        node_feat = self.node_transformer(q=node_feat, context=node_global)
+        # q_mask uses the transformer convention: True = padded node (excluded from attention)
+        node_feat = self.node_transformer(
+            q=node_feat, context=node_global, q_mask=~node_valid)
 
         if self.config.get('add_skip_feat', False):
             node_feat = torch.cat(

@@ -77,8 +77,10 @@ class HGPFLightning(LightningModule):
 
 
     def on_before_optimizer_step(self, optimizer):
-        norms = grad_norm(self.net, norm_type=2)
-        self.norms2store.append(norms['grad_2.0_norm_total'])
+        # grad_norm traverses every parameter's grad; only pay it on steps we log (see training_step)
+        if getattr(self, '_grad_norm_due', True):
+            norms = grad_norm(self.net, norm_type=2)
+            self.norms2store.append(norms['grad_2.0_norm_total'])
 
 
     def set_comet_logger(self, comet_logger):
@@ -87,7 +89,8 @@ class HGPFLightning(LightningModule):
 
     def configure_optimizers(self):
         parameters = filter(lambda p: p.requires_grad, self.parameters())
-        optimizer = torch.optim.AdamW(parameters, lr=self.config_t['learning_rate'])
+        # float(): YAML parses exponent notation without a decimal point (e.g. 6e-4) as a string
+        optimizer = torch.optim.AdamW(parameters, lr=float(self.config_t['learning_rate']))
 
         if self.config_t.get('lr_scheduler', None) == None:
             return optimizer
@@ -119,8 +122,13 @@ class HGPFLightning(LightningModule):
         for key in self.validation_step_perf.log_dicts[0].keys():
             avg_loss = np.hstack([x[key] for x in self.validation_step_perf.log_dicts]).mean()
             logs[key] = avg_loss
-        self.log_dict(logs)
+        # sync_dist: under DDP each rank only saw its own val shard; average across ranks
+        # (val_total_loss is the ModelCheckpoint monitor, so it must be the global value)
+        self.log_dict(logs, sync_dist=True)
 
+        # NOTE: no sync_dist inside these conditional blocks! Whether a rank enters them
+        # depends on which val batches it saw (e.g. event_idxs_to_display), so a synced
+        # collective here deadlocks DDP when ranks disagree. Local logging only.
         if hasattr(self.validation_step_perf, 'hg_summaries'):
             fig, log_dict = live_plotting.plot_hg_summary(self.validation_step_perf.hg_summaries)
             for k, v in log_dict.items():

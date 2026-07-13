@@ -13,10 +13,15 @@ from ..utility.helper_dicts import pdgid_class_dict
 
 class PflowDatasetMini(Dataset):
 
-    def __init__(self, filename, config_v, reduce_ds=-1, compute_incidence=True):
+    def __init__(self, filename, config_v, reduce_ds=-1, compute_incidence=True,
+                 shard_files_by_rank=False):
         '''
         Args:
             filename: str | list of str | str to eval to get list of str
+            shard_files_by_rank: under DDP, load only this rank's slice of the file
+                list (1/world of the load time and RAM). The batch sampler must then
+                skip rank-striding since the data itself is disjoint (it reads the
+                resulting `files_sharded` attribute via get_dataloader).
         '''
 
         super().__init__()
@@ -36,6 +41,20 @@ class PflowDatasetMini(Dataset):
                 filename = eval(filename)
             else:
                 filename = [filename]
+
+        self.files_sharded = False
+        if shard_files_by_rank and torch.distributed.is_available() and torch.distributed.is_initialized():
+            rank = torch.distributed.get_rank()
+            world = torch.distributed.get_world_size()
+            if world > 1 and len(filename) >= world:
+                filename = sorted(filename)[rank::world]  # sorted: identical order on every rank
+                self.files_sharded = True
+                if reduce_ds > 0:  # interpret reduce_ds as a GLOBAL cap -> split across ranks
+                    reduce_ds = max(1, reduce_ds // world)
+                print(f'[rank {rank}] file-sharded dataset: {len(filename)} files, reduce_ds={reduce_ds}')
+            elif world > 1:
+                print(f'\033[96m[rank {rank}] only {len(filename)} file(s) for {world} ranks; '
+                      f'loading all files, sampler will stride batches instead\033[0m')
 
         self.data_dict = {}; self.n_events = 0
         for fn_i, fn in enumerate(filename):
@@ -305,7 +324,8 @@ def collate_fn_mini(samples):
     batch_num_nodes = [x + y for x, y in zip(batch_num_tracks, batch_num_topos)]
     max_num_nodes = max(batch_num_nodes)
 
-    assert all([x == batch_num_nodes[0] for x in batch_num_nodes])
+    # mixed node counts are allowed: shorter samples are zero-padded in the middle
+    # (tracks kept at the front, topos at the back) and marked via is_track/is_topo.
 
     # create batched dicts with zeros
     batched_track_dict = {}
@@ -339,19 +359,38 @@ def collate_fn_mini(samples):
         batched_node_dict['is_track'][i, :batch_num_tracks[i]] = True
         batched_node_dict['is_topo'][i, -batch_num_topos[i]:] = True
 
-    # batched node feat
+    # batched node feat (per-node -> node-dim padded: tracks at front, topos at back)
     for name in sample0['node_dict'].keys():
-        batched_node_dict[name] = torch.stack([x['node_dict'][name] for x in samples])
+        feat_shape = sample0['node_dict'][name].shape[1:]
+        batched = torch.zeros(bs, max_num_nodes, *feat_shape, dtype=sample0['node_dict'][name].dtype)
+        for i, sample in enumerate(samples):
+            val = sample['node_dict'][name]  # (n_tracks_i + n_topos_i, *feat)
+            nt, ntp = batch_num_tracks[i], batch_num_topos[i]
+            if nt > 0:
+                batched[i, :nt] = val[:nt]
+            if ntp > 0:
+                batched[i, max_num_nodes - ntp:] = val[nt:nt + ntp]
+        batched_node_dict[name] = batched
 
     # batched particle feat
     batched_particle_dict = {}
     for name in sample0['particle_dict'].keys():
         batched_particle_dict[name] = torch.stack([x['particle_dict'][name] for x in samples])
 
-    # incidence and indicator are already in the right shape
+    # incidence: pad each (max_particles, n_nodes) matrix to max_num_nodes, aligning
+    # columns with the node layout (tracks at front, topos at back, padding in middle).
     incidence_truth = None
     if samples[0]['incidence'] is not None:
-        incidence_truth = torch.stack([x['incidence'] for x in samples])
+        max_particles = samples[0]['incidence'].shape[0]
+        incidence_truth = torch.zeros(
+            bs, max_particles, max_num_nodes, dtype=samples[0]['incidence'].dtype)
+        for i, sample in enumerate(samples):
+            inc = sample['incidence']  # (max_particles, n_tracks_i + n_topos_i)
+            nt, ntp = batch_num_tracks[i], batch_num_topos[i]
+            if nt > 0:
+                incidence_truth[i, :, :nt] = inc[:, :nt]
+            if ntp > 0:
+                incidence_truth[i, :, max_num_nodes - ntp:] = inc[:, nt:nt + ntp]
     indicator_truth = torch.stack([x['indicator'] for x in samples]) # .bool()
 
     batched_dict = {
@@ -371,11 +410,19 @@ def collate_fn_mini(samples):
 
 
 class PflowSamplerMini(Sampler):
-    def __init__(self, n_nodes_array, batch_size, remove_idxs=[]):
+    def __init__(self, n_nodes_array, batch_size, remove_idxs=[], length_grouped=False,
+                 data_already_sharded=False):
         """
-        Initialization
         :param n_nodes_array: array of the number of nodes (tracks + topos)
         :param batch_size: batch size
+        :param length_grouped: if False (default), each batch holds examples with an
+            identical node count (original behaviour). If True, examples are sorted by
+            node count and chunked into batch_size groups so batches fill to batch_size
+            with only small padding -- lifts the effective-batch cap (needs the model /
+            loss node masking). Meant for training; inference keeps the default.
+        :param data_already_sharded: the dataset holds a per-rank file shard, so do NOT
+            stride batches across ranks; instead truncate every rank to the global
+            minimum batch count (one collective here) so DDP steps stay in lock-step.
         """
         super().__init__()
 
@@ -385,31 +432,72 @@ class PflowSamplerMini(Sampler):
         self.drop_last = False
 
         self.index_to_batch = {}
-        self.node_size_idx = {}
         running_idx = -1
 
-        for n_nodes_i in set(n_nodes_array):
-
-            self.node_size_idx[n_nodes_i] = np.where(n_nodes_array == n_nodes_i)[0]
-            self.node_size_idx[n_nodes_i] = np.setdiff1d(self.node_size_idx[n_nodes_i], remove_idxs)
-            
-            indices = np.arange (0, len(self.node_size_idx[n_nodes_i]), self.batch_size)
-            self.node_size_idx[n_nodes_i] = [self.node_size_idx[n_nodes_i][i: i + self.batch_size] for i in indices]
-
-            for batch in self.node_size_idx[n_nodes_i]:
+        if length_grouped:
+            # sort by node count, chunk into batch_size groups (minimal padding, full batches)
+            valid_idx = np.setdiff1d(np.arange(len(n_nodes_array)), remove_idxs)
+            order = valid_idx[np.argsort(n_nodes_array[valid_idx], kind='stable')]
+            for start in range(0, len(order), self.batch_size):
                 running_idx += 1
-                self.index_to_batch[running_idx] = batch
+                self.index_to_batch[running_idx] = order[start:start + self.batch_size]
+        else:
+            # original: one exact node count per batch
+            for n_nodes_i in set(n_nodes_array):
+                idxs = np.setdiff1d(np.where(n_nodes_array == n_nodes_i)[0], remove_idxs)
+                for i in range(0, len(idxs), self.batch_size):
+                    running_idx += 1
+                    self.index_to_batch[running_idx] = idxs[i:i + self.batch_size]
 
         self.n_batches = running_idx + 1
 
+        # data_already_sharded: equalize the per-rank batch count once, up front
+        # (uneven counts would deadlock DDP at the end of the epoch)
+        self.data_already_sharded = data_already_sharded
+        self._n_batches_equal = self.n_batches
+        if data_already_sharded:
+            rank, world_size = self._dist_info()
+            if world_size > 1:
+                counts = [None] * world_size
+                torch.distributed.all_gather_object(counts, self.n_batches)
+                self._n_batches_equal = min(counts)
+                if rank == 0 and self._n_batches_equal < max(counts):
+                    print(f'[sampler] equalized batches/rank to {self._n_batches_equal} '
+                          f'(per-rank counts: {counts})')
+
+    @staticmethod
+    def _dist_info():
+        if torch.distributed.is_available() and torch.distributed.is_initialized():
+            return torch.distributed.get_rank(), torch.distributed.get_world_size()
+        return 0, 1
+
     def __len__(self):
+        if self.data_already_sharded:
+            return self._n_batches_equal
+        _, world_size = self._dist_info()
+        if world_size > 1:
+            return self.n_batches // world_size
         return self.n_batches
 
     def __iter__(self):
-        batch_order = np.random.permutation(np.arange(self.n_batches))
+        # epoch-seeded so every DDP rank generates the SAME permutation; ranks then
+        # take disjoint strides of it. (Also makes single-GPU batch order reproducible.)
+        self._epoch = getattr(self, '_epoch', -1) + 1
+        rng = np.random.default_rng(12345 + self._epoch)
+        batch_order = rng.permutation(np.arange(self.n_batches))
 
-        # write to single np file both batch_order and self.index_to_batch, will load them in python later
-        np.savez('batch_order.npz', batch_order=batch_order, index_to_batch=self.index_to_batch)
+        rank, world_size = self._dist_info()
+        if self.data_already_sharded:
+            # data is disjoint per rank already; just hold every rank to the same count
+            batch_order = batch_order[:self._n_batches_equal]
+        elif world_size > 1:
+            # equal batch count per rank (drop the remainder) so DDP doesn't deadlock
+            n_even = (len(batch_order) // world_size) * world_size
+            batch_order = batch_order[:n_even][rank::world_size]
+
+        if rank == 0:
+            # write to single np file both batch_order and self.index_to_batch, will load them in python later
+            np.savez('batch_order.npz', batch_order=batch_order, index_to_batch=self.index_to_batch)
 
         for i in batch_order:
             yield self.index_to_batch[i]
