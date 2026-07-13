@@ -1,0 +1,28 @@
+# python
+__pycache__/
+*.pyc
+
+# run artifacts / logs
+job_logs/
+plot_dump/
+.cometml-runs/
+nohup.out
+output*.txt
+train_output*.txt
+prep_timing.log
+stage2_timing*.log
+batch_order.npz
+*_rng_state.pt
+gpu_*.csv
+
+# evaluation outputs
+eval_ab_*/
+eval_plots/
+eval_fullval/
+
+# stage-1 inference outputs accidentally written under configs/ (old path bug)
+configs/cocoa/model_configs/inference/
+
+# local env
+.venv/
+venv_packages.txt
