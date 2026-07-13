@@ -7,7 +7,7 @@ num_nodes: 1
 train_components: [hyperedge]
 
 
-run_name: qqbar_stage2
+run_name: qqbar_stage2_paper_v2
 config_path_v   : /pscratch/sd/a/agolub/hgpflow_runs/hgpflow_v2/largeqqbartraining4nodev1epoch25/config_v.yml
 config_path_ms1 : /pscratch/sd/a/agolub/hgpflow_runs/hgpflow_v2/largeqqbartraining4nodev1epoch25/config_ms1.yml
 checkpoint_ms1  : /pscratch/sd/a/agolub/hgpflow_runs/hgpflow_v2/largeqqbartraining4nodev1epoch25/checkpoints/epoch=24-val_total_loss=0.0943.ckpt
@@ -19,14 +19,14 @@ path_val: |
 # A/B flag: false = published/paper behaviour (dataset length = segment count,
 # node_feat_sum misaligned); true = corrected (all candidates, own segment context).
 # Run both with distinct -ekey and compare val + full-pipeline metrics.
-fix_candidate_context: true
+fix_candidate_context: false
 
 resume_from_checkpoint: null
 
-# ── TIMING TEST values: bump for real runs ──
-num_epochs: 2
-reduce_ds_train: 40000   # tree entries (segments) ~= 2 of 305 files; -1 = all
-reduce_ds_val: 20000     # ~= 1 of 10 val files; -1 = all
+# ── A/B run: 6 epochs, full data ──
+num_epochs: 6
+reduce_ds_train: -1
+reduce_ds_val: -1
 
 eval_every_n_epoch: 1
 

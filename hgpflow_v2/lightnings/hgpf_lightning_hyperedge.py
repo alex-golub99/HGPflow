@@ -14,7 +14,7 @@ class HGPFLightningHyperedge:
         self.config_t = config_t
         self._parent = parent_lightning
 
-        ckpt = torch.load(config_t['checkpoint_ms1'], map_location='cpu')
+        ckpt = torch.load(config_t['checkpoint_ms1'], map_location='cpu', weights_only=False)
 
         node_prep_state_dict = OrderedDict()
         hg_model_state_dict = OrderedDict()
@@ -37,13 +37,17 @@ class HGPFLightningHyperedge:
         ds_kwargs = {
             'filename': self.config_t['path_train'],
             'ind_threshold': self.config_ms2['hyperedge_model']['ind_threshold'],
-            'reduce_ds': self.config_t['reduce_ds_train']}
+            'reduce_ds': self.config_t['reduce_ds_train'],
+            'fix_candidate_context': self.config_t.get('fix_candidate_context', False)}
 
         sampler_kwargs = None
 
         loader_kwargs = {
             'num_workers': self.config_t['num_workers'],
-            'pin_memory': True, 'batch_size': self.config_t['batchsize_train']}
+            'pin_memory': True, 'batch_size': self.config_t['batchsize_train'],
+            # historical behaviour is unshuffled (file order every epoch); enable for
+            # production runs. Under DDP, Lightning's DistributedSampler inherits this.
+            'shuffle': self.config_t.get('shuffle_train', False)}
 
         return get_dataloader('hyperedge', ds_kwargs, sampler_kwargs, loader_kwargs)
     
@@ -52,7 +56,8 @@ class HGPFLightningHyperedge:
         ds_kwargs = {
             'filename': self.config_t['path_val'],
             'ind_threshold': self.config_ms2['hyperedge_model']['ind_threshold'],
-            'reduce_ds': self.config_t['reduce_ds_val']}
+            'reduce_ds': self.config_t['reduce_ds_val'],
+            'fix_candidate_context': self.config_t.get('fix_candidate_context', False)}
 
         sampler_kwargs = None
 
@@ -134,9 +139,6 @@ class HGPFLightningHyperedge:
         
     def compute_loss(self, pred_kin, pred_class_logits, batch):
         loss_to_optimize_on = 0; loss_components = {}
-
-        print('\nfrom compute_loss')
-        print(pred_class_logits[0].shape, batch['truth_class'].shape, batch['truth_is_charged'].shape, batch['truth_ind'].shape, batch['pred_ind'].shape)
 
         # classification is a must
         class_loss, class_loss_components = self.class_loss(
