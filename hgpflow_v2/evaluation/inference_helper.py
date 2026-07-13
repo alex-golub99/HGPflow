@@ -143,11 +143,11 @@ class InferenceHelper:
 
     def get_output_filepath(self, inf_dict):
         if inf_dict.get('pred_path', None) is None:
-            output_dir = self.config_path_v.replace('config_v.yml', 'inference')
+            output_dir = os.path.join(os.path.dirname(self.config_path_v), 'inference')
             output_filepath = \
                 os.path.join(output_dir, inf_dict.get('dir_flag', ''), 'pred_' + inf_dict['seg_path'].split('/')[-1].replace('.root', '_merged.root'))
         else:
-            output_filepath = inf_dict['output_filepath']
+            output_filepath = inf_dict['pred_path']
         return output_filepath
 
 

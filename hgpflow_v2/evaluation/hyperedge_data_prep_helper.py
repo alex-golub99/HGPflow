@@ -45,7 +45,7 @@ class HyperedgeDataPrepHelper:
     
     def load_model(self, checkpoint_path):
         self.lightning_model = HGPFLightning(self.config_v, self.config_ms1, None, self.config_t)
-        checkpoint = torch.load(checkpoint_path, map_location=torch.device('cpu'))
+        checkpoint = torch.load(checkpoint_path, map_location=torch.device('cpu'), weights_only=False)
         self.lightning_model.load_state_dict(checkpoint['state_dict'])
         self.lightning_model.eval()
 
@@ -95,7 +95,7 @@ class HyperedgeDataPrepHelper:
 
     def prep_output_filepath(self, inf_dict):
         if inf_dict.get('output_filepath', None) is None:
-            output_dir = self.config_path_v.replace('config_v.yml', 'inference')
+            output_dir = os.path.join(os.path.dirname(self.config_path_v), 'inference')
             Path(output_dir).mkdir(parents=True, exist_ok=True)
             inf_dict['output_filepath'] = \
                 os.path.join(output_dir, inf_dict.get('dir_flag', ''), 'stage1_inference_' + inf_dict['seg_path'].split('/')[-1])

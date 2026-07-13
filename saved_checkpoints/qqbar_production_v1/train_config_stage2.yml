@@ -1,0 +1,65 @@
+project_name: hgpflow_v2
+
+device: cuda
+num_devices: 1
+num_nodes: 1
+
+train_components: [hyperedge]
+
+
+run_name: qqbar_stage2_fixed_v2
+config_path_v   : /pscratch/sd/a/agolub/hgpflow_runs/hgpflow_v2/largeqqbartraining4nodev1epoch25/config_v.yml
+config_path_ms1 : /pscratch/sd/a/agolub/hgpflow_runs/hgpflow_v2/largeqqbartraining4nodev1epoch25/config_ms1.yml
+checkpoint_ms1  : /pscratch/sd/a/agolub/hgpflow_runs/hgpflow_v2/largeqqbartraining4nodev1epoch25/checkpoints/epoch=24-val_total_loss=0.0943.ckpt
+path_train: |
+    glob.glob('/pscratch/sd/a/agolub/hgpflow_runs/hgpflow_v2/largeqqbartraining4nodev1epoch25/inference/qqbar_train/stage1_inference_*.root')
+path_val: |
+    glob.glob('/pscratch/sd/a/agolub/hgpflow_runs/hgpflow_v2/largeqqbartraining4nodev1epoch25/inference/qqbar_val/stage1_inference_*.root')
+
+# A/B flag: false = published/paper behaviour (dataset length = segment count,
+# node_feat_sum misaligned); true = corrected (all candidates, own segment context).
+# Run both with distinct -ekey and compare val + full-pipeline metrics.
+fix_candidate_context: true
+
+resume_from_checkpoint: null
+
+# ── A/B run: 6 epochs, full data ──
+num_epochs: 6
+reduce_ds_train: -1
+reduce_ds_val: -1
+
+eval_every_n_epoch: 1
+
+batchsize_train: 512
+batchsize_val: 1024
+
+num_workers: 8
+
+learning_rate: 1.0e-4
+lr_scheduler:
+    name: CustomLRScheduler
+    warm_start_epochs: 0.0
+    cosine_epochs: 0.999
+    eta_min: 5.0e-5
+    last_epoch: -1
+
+loss_wts:
+  ch:
+    pt: 5.0
+    eta: 0.0
+    phi: 0.0
+    class: 0.05
+  neut:
+    ke: 20.0
+    eta: 0.0
+    phi: 0.0
+    class: 0.05
+
+class_based_wts:
+  ch: [1.0, 1.0, 1.0] # [ch, e, mu]
+  neut: [0.71, 0.29] # [nh, ph]
+
+base_root_dir: /pscratch/sd/a/agolub/hgpflow_runs
+
+train_log_every_n_steps: 25
+apply_truth_ind_mask_on_live_plots: True # stage1 is responsible for correct indicatior

@@ -4,30 +4,41 @@ init:
   gpu: 0
   chunk_size: 256
   batch_size: 256
-  num_workers: 2
+  num_workers: 8
   precision: medium
 
   model:
-    config_path_v   : /saved_checkpoints/cocoaxminixv1x250kxs1xxxer4oji6g/config_v.yml
-    config_path_ms1 : /saved_checkpoints/cocoaxminixv1x250kxs1xxxer4oji6g/config_ms1.yml
-    config_path_t   : /saved_checkpoints/cocoaxminixv1x250kxs1xxxer4oji6g/config_t.yml
-    checkpoint_path : /saved_checkpoints/cocoaxminixv1x250kxs1xxxer4oji6g/checkpoints/epoch=79-val_total_loss=0.0799.ckpt
+    # archived configs + best checkpoint from the 25-epoch 4-node run (val 0.0943).
+    # NOTE: outputs are written next to config_path_v -> <run_dir>/inference/<dir_flag>/
+    config_path_v   : /pscratch/sd/a/agolub/hgpflow_runs/hgpflow_v2/largeqqbartraining4nodev1epoch25/config_v.yml
+    config_path_ms1 : /pscratch/sd/a/agolub/hgpflow_runs/hgpflow_v2/largeqqbartraining4nodev1epoch25/config_ms1.yml
+    config_path_t   : /pscratch/sd/a/agolub/hgpflow_runs/hgpflow_v2/largeqqbartraining4nodev1epoch25/config_t.yml
+    checkpoint_path : /pscratch/sd/a/agolub/hgpflow_runs/hgpflow_v2/largeqqbartraining4nodev1epoch25/checkpoints/epoch=24-val_total_loss=0.0943.ckpt
 
+  # deliberately below the ~0.4 operating point so stage-2 training data keeps
+  # nearly everything (energy-weighted loss < 1%; see quantify_missed_neutrals.py)
   ind_threshold_loose: 0.2
 
 
 items:
-  - info: "dijet train"
-    seg_path: |
-      glob.glob('path to train/cocoa_dijet_chunk_*_seg_bw0.4.root')
-    dir_flag: 'dijet'
-    output_path: null
+  # ── TIMING TEST: 2 of 305 train files. Scale wall-time by ~152x for the full set. ──
+  - info: "qqbar train (timing test: 2 files)"
+    seg_path: [/pscratch/sd/a/agolub/qqbar_events/split_train/split_qqbar_0_1000.root, /pscratch/sd/a/agolub/qqbar_events/split_train/split_qqbar_1000_2000.root]
+    dir_flag: 'qqbar_train'
+    output_filepath: null
     n_events: -1
 
-
-  - info: "dijet val"
-    seg_path: |
-      glob.glob('path to val/cocoa_dijet_chunk_*_seg_bw0.4.root')
-    dir_flag: 'dijet'
-    output_path: null
-    n_events: -1
+  # ── FULL RUN: uncomment these (and remove the timing item) ──
+  # - info: "qqbar train (full)"
+  #   seg_path: |
+  #     glob.glob('/pscratch/sd/a/agolub/qqbar_events/split_train/*.root')
+  #   dir_flag: 'qqbar_train'
+  #   output_filepath: null
+  #   n_events: -1
+  #
+  # - info: "qqbar val"
+  #   seg_path: |
+  #     glob.glob('/pscratch/sd/a/agolub/qqbar_events/split_val/*.root')
+  #   dir_flag: 'qqbar_val'
+  #   output_filepath: null
+  #   n_events: -1

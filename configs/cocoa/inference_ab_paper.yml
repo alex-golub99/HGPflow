@@ -1,0 +1,31 @@
+init:
+  detector: COCOA
+
+  gpu: 0
+  precision: medium
+  chunk_size: 512
+  batch_size: 512
+  num_workers: 8
+
+  model:
+    config_path_v   : /pscratch/sd/a/agolub/hgpflow_runs/hgpflow_v2/largeqqbartraining4nodev1epoch25/config_v.yml
+    config_path_ms1 : /pscratch/sd/a/agolub/hgpflow_runs/hgpflow_v2/largeqqbartraining4nodev1epoch25/config_ms1.yml
+    config_path_ms2 : configs/cocoa/model_configs/model_stage2.yml
+    checkpoint_path : /pscratch/sd/a/agolub/hgpflow_runs/hgpflow_v2/qqbarstage2paperv1/checkpoints/epoch=5-val_total_loss=0.0567.ckpt
+
+  # keep everything in the pred file; the operating threshold is applied by evaluate.py
+  ind_threshold_loose: -0.1
+  ind_threshold_plot: 0.4
+  store_seg: false
+
+items:
+  - info: "A/B stage-2 eval (paper arm), same val events for both arms"
+    run_pred: true
+    run_plot: false
+
+    seg_path: /pscratch/sd/a/agolub/qqbar_events/split_val/split_qqbar_305000_306000.root
+    truth_path: null
+    pred_path: null
+
+    dir_flag: ab_paper
+    n_events: -1
