@@ -97,8 +97,9 @@ class Performance:
 
 
     def match_jets(self):
-        self.truth_dict['matched_ppflow_jets'] = self.match_jets_all_ev(
-            self.truth_dict['truth_jets'], self.truth_dict['ppflow_jets'])
+        if 'ppflow_jets' in self.truth_dict:
+            self.truth_dict['matched_ppflow_jets'] = self.match_jets_all_ev(
+                self.truth_dict['truth_jets'], self.truth_dict['ppflow_jets'])
         self.hgpflow_dict['matched_proxy_jets'] = self.match_jets_all_ev(
             self.truth_dict['truth_jets'], self.hgpflow_dict['proxy_jets'])
         self.hgpflow_dict['matched_hgpflow_jets'] = self.match_jets_all_ev(
@@ -223,10 +224,25 @@ class Performance:
 
 class PerformanceCOCOA(Performance):
 
-    def __init__(self, truth_path, pred_path, ind_threshold, pred_path_mlpf=None, topo=False, hgpf_target_path=None):
+    def __init__(self, truth_path, pred_path, ind_threshold, pred_path_mlpf=None, topo=False,
+                 hgpf_target_path=None, positional_event_numbers=True, event_number_offset=0,
+                 llp_lxy_mm=None):
+        # positional_event_numbers=True by default: preds from the event splitter are
+        # numbered by entry position, while skimmed truth files (e.g. the paper samples)
+        # have GAPS in their event_number branch -> branch-based matching misaligns
+        # every event after the first gap. Set False only if your preds carry the
+        # original branch numbering.
+        # event_number_offset: the splitter's -eo OFFSET, when preds were produced
+        # from a shifted numbering of this truth file.
+        # llp_lxy_mm: displaced-vertex threshold [mm] to tag LLP-origin truth particles
+        # (enables tag_truth_jets_llp / plot_jet_residuals_llp). Requires compute_jets
+        # with store_constituent_idxs=True.
         super().__init__(pred_path, ind_threshold, topo=topo, hgpf_target_path=hgpf_target_path)
-        
-        self.truth_dict = load_truth_cocoa(truth_path, topo)
+        self.llp_lxy_mm = llp_lxy_mm
+
+        self.truth_dict = load_truth_cocoa(truth_path, topo,
+            positional_event_numbers=positional_event_numbers,
+            event_number_offset=event_number_offset, llp_lxy_mm=llp_lxy_mm)
         if not pred_path_mlpf is None:
             self.mlpf_dict = load_pred_mlpf(pred_path_mlpf, truth_event_number_offset=0, num_ev_in_one_file=100) ####
         self.reorder_and_find_intersection()
@@ -241,11 +257,12 @@ class PerformanceCOCOA(Performance):
             self.truth_dict['particle_phi'], self.truth_dict['particle_e'], 
             fourth_name='E', n_procs=n_procs, store_constituent_idxs=store_constituent_idxs)
 
-        print('ppflow')
-        self.truth_dict['ppflow_jets'] = compute_jets(jet_obj, 
-            self.truth_dict['pflow_pt'], self.truth_dict['pflow_eta'],
-            self.truth_dict['pflow_phi'], self.truth_dict['pflow_e'], 
-            fourth_name='E', n_procs=n_procs, store_constituent_idxs=store_constituent_idxs)
+        if 'pflow_pt' in self.truth_dict:  # optional: production may lack parametric pflow
+            print('ppflow')
+            self.truth_dict['ppflow_jets'] = compute_jets(jet_obj,
+                self.truth_dict['pflow_pt'], self.truth_dict['pflow_eta'],
+                self.truth_dict['pflow_phi'], self.truth_dict['pflow_e'],
+                fourth_name='E', n_procs=n_procs, store_constituent_idxs=store_constituent_idxs)
         
         if not self.mlpf_dict is None:
             print('mlpf')

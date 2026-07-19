@@ -1,3 +1,4 @@
+import glob as _glob
 import uproot
 import numpy as np
 from tqdm import tqdm
@@ -6,19 +7,29 @@ from ..utility.helper_dicts import pdgid_class_dict, class_mass_dict
 
 
 def load_pred_hgpflow(pred_path, threshold=0.5):
-    tree = uproot.open(pred_path)['event_tree']
+    '''pred_path: single file, glob pattern, or list of files (chunked preds are
+    concatenated; event numbers must be globally unique across files).'''
+    if isinstance(pred_path, str) and any(c in pred_path for c in '*?['):
+        pred_path = sorted(_glob.glob(pred_path))
+        assert pred_path, f'no files match {pred_path}'
+    paths = pred_path if isinstance(pred_path, list) else [pred_path]
 
     vars_to_load = [
         'pred_ind', 'proxy_pt', 'proxy_eta', 'proxy_phi',
         'hgpflow_pt', 'hgpflow_eta', 'hgpflow_phi', 'hgpflow_class']
 
-    mask = np.array([x > threshold for x in tree['pred_ind'].array(library='np')], dtype=object)
+    per_var = {var: [] for var in vars_to_load}
+    event_numbers = []
+    for p in tqdm(paths, desc="Loading HGPFlow predictions...", total=len(paths)):
+        tree = uproot.open(p)['event_tree']
+        mask = np.array([x > threshold for x in tree['pred_ind'].array(library='np')], dtype=object)
+        for var in vars_to_load:
+            per_var[var].append(np.array([
+                x[m] for x, m in zip(tree[var].array(library='np'), mask)], dtype=object))
+        event_numbers.append(tree['event_number'].array(library='np').astype(int))
 
-    hgpflow_dict = {}
-    for var in tqdm(vars_to_load, desc="Loading HGPFlow predictions...", total=len(vars_to_load)):
-        hgpflow_dict[var] = np.array([
-            x[m] for x, m in zip(tree[var].array(library='np'), mask)], dtype=object)
-    hgpflow_dict['event_number'] = tree['event_number'].array(library='np').astype(int) # - 643_00 # HACK
+    hgpflow_dict = {var: np.concatenate(per_var[var]) for var in vars_to_load}
+    hgpflow_dict['event_number'] = np.concatenate(event_numbers)
 
     # compute mass and energy
     for k in ['mass', 'e', 'charge']:
@@ -82,31 +93,58 @@ def load_pred_mlpf(pred_path, num_ev_in_one_file, truth_event_number_offset):
     return mlpf_dict
 
 
-def load_truth_cocoa(truth_path, topo=False):
+def load_truth_cocoa(truth_path, topo=False, positional_event_numbers=False,
+                     event_number_offset=0, llp_lxy_mm=None):
+    '''positional_event_numbers: number truth events by ENTRY POSITION (0..N-1)
+    instead of the event_number branch. Required when preds come from the event
+    splitter, which numbers segments positionally: skimmed files (e.g. the paper
+    samples) have gaps in the branch, silently misaligning truth vs pred.
+    event_number_offset: added to positional numbers -- use the splitter's -eo
+    OFFSET when the preds were produced from a shifted range of this file.
+    pflow_* branches are optional (productions without the parametric pflow).
+    llp_lxy_mm: if set, tag each truth particle as LLP-origin when its production
+    transverse displacement Lxy = sqrt(prod_x^2 + prod_y^2) > llp_lxy_mm. The flag
+    (truth_dict['particle_llp_origin']) rides through the SAME fiducial cut as the
+    kinematics, so it stays index-aligned for per-jet LLP-fraction tagging.'''
     scale_E_pT=1e-3
     print("\033[96m" + f"E, pT will be scaled by {scale_E_pT}" + "\033[0m")
 
     tree = uproot.open(truth_path)['Out_Tree']
     n_events = tree.num_entries
 
+    has_pflow = 'pflow_e' in tree.keys()
+    if not has_pflow:
+        print("\033[96m" + "no pflow_* branches in this file -> skipping PPflow baseline" + "\033[0m")
+
     truth_dict = {}
     vars_to_load = [
-        'particle_pt', 'particle_eta', 'particle_phi', 'particle_e', 'particle_pdgid',
-        'pflow_e', 'pflow_eta', 'pflow_phi', 'pflow_charge', 'pflow_px', 'pflow_py']
+        'particle_pt', 'particle_eta', 'particle_phi', 'particle_e', 'particle_pdgid']
+    if has_pflow:
+        vars_to_load += ['pflow_e', 'pflow_eta', 'pflow_phi', 'pflow_charge', 'pflow_px', 'pflow_py']
+    if llp_lxy_mm is not None:
+        vars_to_load += ['particle_prod_x', 'particle_prod_y']
 
     for var in tqdm(vars_to_load, desc="Reading truth tree...", total=len(vars_to_load)):
         truth_dict[var] = tree[var].array(library='np')
 
-    # pflow pt
-    truth_dict['pflow_pt'] = np.array([
-        np.sqrt(x**2 + y**2) for x, y in zip(truth_dict['pflow_px'], truth_dict['pflow_py'])
-    ], dtype=object)
+    # LLP-origin flag from displaced production vertex (before any cuts/deletes)
+    if llp_lxy_mm is not None:
+        truth_dict['particle_llp_origin'] = np.array([
+            (np.hypot(x, y) > llp_lxy_mm) for x, y in
+            zip(truth_dict['particle_prod_x'], truth_dict['particle_prod_y'])], dtype=object)
+
+    if has_pflow:
+        # pflow pt
+        truth_dict['pflow_pt'] = np.array([
+            np.sqrt(x**2 + y**2) for x, y in zip(truth_dict['pflow_px'], truth_dict['pflow_py'])
+        ], dtype=object)
 
     # MeV to GeV
     truth_dict['particle_pt'] = truth_dict['particle_pt'] * scale_E_pT
     truth_dict['particle_e'] = truth_dict['particle_e'] * scale_E_pT
-    truth_dict['pflow_e'] = truth_dict['pflow_e'] * scale_E_pT
-    truth_dict['pflow_pt'] = truth_dict['pflow_pt'] * scale_E_pT
+    if has_pflow:
+        truth_dict['pflow_e'] = truth_dict['pflow_e'] * scale_E_pT
+        truth_dict['pflow_pt'] = truth_dict['pflow_pt'] * scale_E_pT
 
     # particle class and charge
     truth_dict['particle_class'] = np.empty_like(truth_dict['particle_pdgid'])
@@ -116,23 +154,30 @@ def load_truth_cocoa(truth_path, topo=False):
         truth_dict['particle_charge'][i] = np.array([1 if x <= 2 else 0 for x in truth_dict['particle_class'][i]])
 
     # delete unnecessary variables
-    vars_to_delete = ['particle_pdgid', 'pflow_px', 'pflow_py']
+    vars_to_delete = (['particle_pdgid'] + (['pflow_px', 'pflow_py'] if has_pflow else [])
+                      + (['particle_prod_x', 'particle_prod_y'] if llp_lxy_mm is not None else []))
     for var in vars_to_delete:
         del truth_dict[var]
     gc.collect()
 
+    # particle vars that must survive the fiducial cut together (index-aligned)
+    particle_cut_vars = ['particle_pt', 'particle_eta', 'particle_phi', 'particle_e', 'particle_class']
+    if llp_lxy_mm is not None:
+        particle_cut_vars.append('particle_llp_origin')
+
     # fiducial cuts
     for i in tqdm(range(n_events), desc="Applying fiducial cuts...", total=n_events):
-        
+
         # on particles (pt > 1 GeV, |eta| < 3)
         mask = (truth_dict['particle_pt'][i] >= 1) * (abs(truth_dict['particle_eta'][i]) < 3)
-        for var in ['particle_pt', 'particle_eta', 'particle_phi', 'particle_e', 'particle_class']:
+        for var in particle_cut_vars:
             truth_dict[var][i] = truth_dict[var][i][mask]
 
         # on ppflow (|eta| < 3)
-        mask = abs(truth_dict['pflow_eta'][i]) < 3
-        for var in ['pflow_pt', 'pflow_eta', 'pflow_phi', 'pflow_e', 'pflow_charge']:
-            truth_dict[var][i] = truth_dict[var][i][mask]
+        if has_pflow:
+            mask = abs(truth_dict['pflow_eta'][i]) < 3
+            for var in ['pflow_pt', 'pflow_eta', 'pflow_phi', 'pflow_e', 'pflow_charge']:
+                truth_dict[var][i] = truth_dict[var][i][mask]
 
     # reading topo
     if topo:
@@ -152,16 +197,17 @@ def load_truth_cocoa(truth_path, topo=False):
     truth_dict['particle_mass'] = np.array(truth_dict['particle_mass'], dtype=object)
 
     # compute mass (pflow)
-    truth_dict['pflow_mass'] = []
-    for pt, eta, e in zip(truth_dict['pflow_pt'], truth_dict['pflow_eta'], truth_dict['pflow_e']):
-        p = pt * np.cosh(eta)
-        truth_dict['pflow_mass'].append(np.sqrt(e**2 - p**2))
-    truth_dict['pflow_mass'] = np.array(truth_dict['pflow_mass'], dtype=object)
+    if has_pflow:
+        truth_dict['pflow_mass'] = []
+        for pt, eta, e in zip(truth_dict['pflow_pt'], truth_dict['pflow_eta'], truth_dict['pflow_e']):
+            p = pt * np.cosh(eta)
+            truth_dict['pflow_mass'].append(np.sqrt(e**2 - p**2))
+        truth_dict['pflow_mass'] = np.array(truth_dict['pflow_mass'], dtype=object)
 
-    if 'event_number' in tree.keys():
-        truth_dict['event_number'] = tree['event_number'].array(library='np')
+    if positional_event_numbers or ('event_number' not in tree.keys()):
+        truth_dict['event_number'] = np.arange(len(truth_dict['particle_pt'])) + event_number_offset
     else:
-        truth_dict['event_number'] = np.arange(len(truth_dict['particle_pt']))
+        truth_dict['event_number'] = tree['event_number'].array(library='np')
 
     return truth_dict
 
