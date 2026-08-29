@@ -1,0 +1,374 @@
+[96mE, pT will be scaled by 0.001[0m
+common event count: 29976
+Jet clustering algorithm:  antikt
+Jet clustering radius:  0.4
+truth
+Jet clustering algorithm:  antikt
+Jet clustering radius:  0.4
+Jet clustering algorithm:  antikt
+Jet clustering radius:  0.4
+#--------------------------------------------------------------------------
+#                         FastJet release 3.5.1
+#                 M. Cacciari, G.P. Salam and G. Soyez                  
+#     A software package for jet finding and analysis at colliders      
+#                           https://fastjet.fr                           
+#	                                                                      
+# Please cite EPJC72(2012)1896 [arXiv:1111.6097] if you use this package
+# for scientific work and optionally PLB641(2006)57 [hep-ph/0512210].   
+#                                                                       
+# FastJet is provided without warranty under the GNU GPL v2 or higher.  
+# It uses T. Chan's closest pair algorithm, S. Fortune's Voronoi code,
+# CGAL and 3rd party plugin jet algorithms. See COPYING file for details.
+#--------------------------------------------------------------------------
+#--------------------------------------------------------------------------
+#                         FastJet release 3.5.1
+#                 M. Cacciari, G.P. Salam and G. Soyez                  
+#     A software package for jet finding and analysis at colliders      
+#                           https://fastjet.fr                           
+#	                                                                      
+# Please cite EPJC72(2012)1896 [arXiv:1111.6097] if you use this package
+# for scientific work and optionally PLB641(2006)57 [hep-ph/0512210].   
+#                                                                       
+# FastJet is provided without warranty under the GNU GPL v2 or higher.  
+# It uses T. Chan's closest pair algorithm, S. Fortune's Voronoi code,
+# CGAL and 3rd party plugin jet algorithms. See COPYING file for details.
+#--------------------------------------------------------------------------
+Jet clustering algorithm:  antikt
+Jet clustering radius:  0.4
+Jet clustering algorithm:  antikt
+Jet clustering radius:  0.4
+#--------------------------------------------------------------------------
+#                         FastJet release 3.5.1
+#                 M. Cacciari, G.P. Salam and G. Soyez                  
+#     A software package for jet finding and analysis at colliders      
+#                           https://fastjet.fr                           
+#	                                                                      
+# Please cite EPJC72(2012)1896 [arXiv:1111.6097] if you use this package
+# for scientific work and optionally PLB641(2006)57 [hep-ph/0512210].   
+#                                                                       
+# FastJet is provided without warranty under the GNU GPL v2 or higher.  
+# It uses T. Chan's closest pair algorithm, S. Fortune's Voronoi code,
+# CGAL and 3rd party plugin jet algorithms. See COPYING file for details.
+#--------------------------------------------------------------------------
+Jet clustering algorithm:  antikt
+Jet clustering radius:  0.4
+#--------------------------------------------------------------------------
+#                         FastJet release 3.5.1
+#                 M. Cacciari, G.P. Salam and G. Soyez                  
+#     A software package for jet finding and analysis at colliders      
+#                           https://fastjet.fr                           
+#	                                                                      
+# Please cite EPJC72(2012)1896 [arXiv:1111.6097] if you use this package
+# for scientific work and optionally PLB641(2006)57 [hep-ph/0512210].   
+#                                                                       
+# FastJet is provided without warranty under the GNU GPL v2 or higher.  
+# It uses T. Chan's closest pair algorithm, S. Fortune's Voronoi code,
+# CGAL and 3rd party plugin jet algorithms. See COPYING file for details.
+#--------------------------------------------------------------------------
+Jet clustering algorithm:  antikt
+Jet clustering radius:  0.4
+#--------------------------------------------------------------------------
+#                         FastJet release 3.5.1
+#                 M. Cacciari, G.P. Salam and G. Soyez                  
+#     A software package for jet finding and analysis at colliders      
+#                           https://fastjet.fr                           
+#	                                                                      
+# Please cite EPJC72(2012)1896 [arXiv:1111.6097] if you use this package
+# for scientific work and optionally PLB641(2006)57 [hep-ph/0512210].   
+#                                                                       
+# FastJet is provided without warranty under the GNU GPL v2 or higher.  
+# It uses T. Chan's closest pair algorithm, S. Fortune's Voronoi code,
+# CGAL and 3rd party plugin jet algorithms. See COPYING file for details.
+#--------------------------------------------------------------------------
+Jet clustering algorithm:  antikt
+Jet clustering radius:  0.4
+#--------------------------------------------------------------------------
+#                         FastJet release 3.5.1
+#                 M. Cacciari, G.P. Salam and G. Soyez                  
+#     A software package for jet finding and analysis at colliders      
+#                           https://fastjet.fr                           
+#	                                                                      
+# Please cite EPJC72(2012)1896 [arXiv:1111.6097] if you use this package
+# for scientific work and optionally PLB641(2006)57 [hep-ph/0512210].   
+#                                                                       
+# FastJet is provided without warranty under the GNU GPL v2 or higher.  
+# It uses T. Chan's closest pair algorithm, S. Fortune's Voronoi code,
+# CGAL and 3rd party plugin jet algorithms. See COPYING file for details.
+#--------------------------------------------------------------------------
+#--------------------------------------------------------------------------
+#                         FastJet release 3.5.1
+#                 M. Cacciari, G.P. Salam and G. Soyez                  
+#     A software package for jet finding and analysis at colliders      
+#                           https://fastjet.fr                           
+#	                                                                      
+# Please cite EPJC72(2012)1896 [arXiv:1111.6097] if you use this package
+# for scientific work and optionally PLB641(2006)57 [hep-ph/0512210].   
+#                                                                       
+# FastJet is provided without warranty under the GNU GPL v2 or higher.  
+# It uses T. Chan's closest pair algorithm, S. Fortune's Voronoi code,
+# CGAL and 3rd party plugin jet algorithms. See COPYING file for details.
+#--------------------------------------------------------------------------
+Jet clustering algorithm:  antikt
+Jet clustering radius:  0.4
+#--------------------------------------------------------------------------
+#                         FastJet release 3.5.1
+#                 M. Cacciari, G.P. Salam and G. Soyez                  
+#     A software package for jet finding and analysis at colliders      
+#                           https://fastjet.fr                           
+#	                                                                      
+# Please cite EPJC72(2012)1896 [arXiv:1111.6097] if you use this package
+# for scientific work and optionally PLB641(2006)57 [hep-ph/0512210].   
+#                                                                       
+# FastJet is provided without warranty under the GNU GPL v2 or higher.  
+# It uses T. Chan's closest pair algorithm, S. Fortune's Voronoi code,
+# CGAL and 3rd party plugin jet algorithms. See COPYING file for details.
+#--------------------------------------------------------------------------
+Jet clustering algorithm:  antikt
+Jet clustering radius:  0.4
+#--------------------------------------------------------------------------
+#                         FastJet release 3.5.1
+#                 M. Cacciari, G.P. Salam and G. Soyez                  
+#     A software package for jet finding and analysis at colliders      
+#                           https://fastjet.fr                           
+#	                                                                      
+# Please cite EPJC72(2012)1896 [arXiv:1111.6097] if you use this package
+# for scientific work and optionally PLB641(2006)57 [hep-ph/0512210].   
+#                                                                       
+# FastJet is provided without warranty under the GNU GPL v2 or higher.  
+# It uses T. Chan's closest pair algorithm, S. Fortune's Voronoi code,
+# CGAL and 3rd party plugin jet algorithms. See COPYING file for details.
+#--------------------------------------------------------------------------
+Jet clustering algorithm:  antikt
+Jet clustering radius:  0.4
+#--------------------------------------------------------------------------
+#                         FastJet release 3.5.1
+#                 M. Cacciari, G.P. Salam and G. Soyez                  
+#     A software package for jet finding and analysis at colliders      
+#                           https://fastjet.fr                           
+#	                                                                      
+# Please cite EPJC72(2012)1896 [arXiv:1111.6097] if you use this package
+# for scientific work and optionally PLB641(2006)57 [hep-ph/0512210].   
+#                                                                       
+# FastJet is provided without warranty under the GNU GPL v2 or higher.  
+# It uses T. Chan's closest pair algorithm, S. Fortune's Voronoi code,
+# CGAL and 3rd party plugin jet algorithms. See COPYING file for details.
+#--------------------------------------------------------------------------
+Jet clustering algorithm:  antikt
+Jet clustering radius:  0.4
+#--------------------------------------------------------------------------
+#                         FastJet release 3.5.1
+#                 M. Cacciari, G.P. Salam and G. Soyez                  
+#     A software package for jet finding and analysis at colliders      
+#                           https://fastjet.fr                           
+#	                                                                      
+# Please cite EPJC72(2012)1896 [arXiv:1111.6097] if you use this package
+# for scientific work and optionally PLB641(2006)57 [hep-ph/0512210].   
+#                                                                       
+# FastJet is provided without warranty under the GNU GPL v2 or higher.  
+# It uses T. Chan's closest pair algorithm, S. Fortune's Voronoi code,
+# CGAL and 3rd party plugin jet algorithms. See COPYING file for details.
+#--------------------------------------------------------------------------
+Jet clustering algorithm:  antikt
+Jet clustering radius:  0.4
+#--------------------------------------------------------------------------
+#                         FastJet release 3.5.1
+#                 M. Cacciari, G.P. Salam and G. Soyez                  
+#     A software package for jet finding and analysis at colliders      
+#                           https://fastjet.fr                           
+#	                                                                      
+# Please cite EPJC72(2012)1896 [arXiv:1111.6097] if you use this package
+# for scientific work and optionally PLB641(2006)57 [hep-ph/0512210].   
+#                                                                       
+# FastJet is provided without warranty under the GNU GPL v2 or higher.  
+# It uses T. Chan's closest pair algorithm, S. Fortune's Voronoi code,
+# CGAL and 3rd party plugin jet algorithms. See COPYING file for details.
+#--------------------------------------------------------------------------
+Jet clustering algorithm:  antikt
+Jet clustering radius:  0.4
+#--------------------------------------------------------------------------
+#                         FastJet release 3.5.1
+#                 M. Cacciari, G.P. Salam and G. Soyez                  
+#     A software package for jet finding and analysis at colliders      
+#                           https://fastjet.fr                           
+#	                                                                      
+# Please cite EPJC72(2012)1896 [arXiv:1111.6097] if you use this package
+# for scientific work and optionally PLB641(2006)57 [hep-ph/0512210].   
+#                                                                       
+# FastJet is provided without warranty under the GNU GPL v2 or higher.  
+# It uses T. Chan's closest pair algorithm, S. Fortune's Voronoi code,
+# CGAL and 3rd party plugin jet algorithms. See COPYING file for details.
+#--------------------------------------------------------------------------
+Jet clustering algorithm:  antikt
+Jet clustering radius:  0.4
+#--------------------------------------------------------------------------
+#                         FastJet release 3.5.1
+#                 M. Cacciari, G.P. Salam and G. Soyez                  
+#     A software package for jet finding and analysis at colliders      
+#                           https://fastjet.fr                           
+#	                                                                      
+# Please cite EPJC72(2012)1896 [arXiv:1111.6097] if you use this package
+# for scientific work and optionally PLB641(2006)57 [hep-ph/0512210].   
+#                                                                       
+# FastJet is provided without warranty under the GNU GPL v2 or higher.  
+# It uses T. Chan's closest pair algorithm, S. Fortune's Voronoi code,
+# CGAL and 3rd party plugin jet algorithms. See COPYING file for details.
+#--------------------------------------------------------------------------
+Jet clustering algorithm:  antikt
+Jet clustering radius:  0.4
+#--------------------------------------------------------------------------
+#                         FastJet release 3.5.1
+#                 M. Cacciari, G.P. Salam and G. Soyez                  
+#     A software package for jet finding and analysis at colliders      
+#                           https://fastjet.fr                           
+#	                                                                      
+# Please cite EPJC72(2012)1896 [arXiv:1111.6097] if you use this package
+# for scientific work and optionally PLB641(2006)57 [hep-ph/0512210].   
+#                                                                       
+# FastJet is provided without warranty under the GNU GPL v2 or higher.  
+# It uses T. Chan's closest pair algorithm, S. Fortune's Voronoi code,
+# CGAL and 3rd party plugin jet algorithms. See COPYING file for details.
+#--------------------------------------------------------------------------
+Jet clustering algorithm:  antikt
+Jet clustering radius:  0.4
+#--------------------------------------------------------------------------
+#                         FastJet release 3.5.1
+#                 M. Cacciari, G.P. Salam and G. Soyez                  
+#     A software package for jet finding and analysis at colliders      
+#                           https://fastjet.fr                           
+#	                                                                      
+# Please cite EPJC72(2012)1896 [arXiv:1111.6097] if you use this package
+# for scientific work and optionally PLB641(2006)57 [hep-ph/0512210].   
+#                                                                       
+# FastJet is provided without warranty under the GNU GPL v2 or higher.  
+# It uses T. Chan's closest pair algorithm, S. Fortune's Voronoi code,
+# CGAL and 3rd party plugin jet algorithms. See COPYING file for details.
+#--------------------------------------------------------------------------
+ppflow
+Jet clustering algorithm:  antikt
+Jet clustering radius:  0.4
+Jet clustering algorithm:  antikt
+Jet clustering radius:  0.4
+Jet clustering algorithm:  antikt
+Jet clustering radius:  0.4
+Jet clustering algorithm:  antikt
+Jet clustering radius:  0.4
+Jet clustering algorithm:  antikt
+Jet clustering radius:  0.4
+Jet clustering algorithm:  antikt
+Jet clustering radius:  0.4
+Jet clustering algorithm:  antikt
+Jet clustering radius:  0.4
+Jet clustering algorithm:  antikt
+Jet clustering radius:  0.4
+Jet clustering algorithm:  antikt
+Jet clustering radius:  0.4
+Jet clustering algorithm:  antikt
+Jet clustering radius:  0.4
+Jet clustering algorithm:  antikt
+Jet clustering radius:  0.4
+Jet clustering algorithm:  antikt
+Jet clustering radius:  0.4
+Jet clustering algorithm:  antikt
+Jet clustering radius:  0.4
+Jet clustering algorithm:  antikt
+Jet clustering radius:  0.4
+Jet clustering algorithm:  antikt
+Jet clustering radius:  0.4
+Jet clustering algorithm:  antikt
+Jet clustering radius:  0.4
+proxy
+Jet clustering algorithm:  antikt
+Jet clustering radius:  0.4
+Jet clustering algorithm:  antikt
+Jet clustering radius:  0.4
+Jet clustering algorithm:  antikt
+Jet clustering radius:  0.4
+Jet clustering algorithm:  antikt
+Jet clustering radius:  0.4
+Jet clustering algorithm:  antikt
+Jet clustering radius:  0.4
+Jet clustering algorithm:  antikt
+Jet clustering radius:  0.4
+Jet clustering algorithm:  antikt
+Jet clustering radius:  0.4
+Jet clustering algorithm:  antikt
+Jet clustering radius:  0.4
+Jet clustering algorithm:  antikt
+Jet clustering radius:  0.4
+Jet clustering algorithm:  antikt
+Jet clustering radius:  0.4
+Jet clustering algorithm:  antikt
+Jet clustering radius:  0.4
+Jet clustering algorithm:  antikt
+Jet clustering radius:  0.4
+Jet clustering algorithm:  antikt
+Jet clustering radius:  0.4
+Jet clustering algorithm:  antikt
+Jet clustering radius:  0.4
+Jet clustering algorithm:  antikt
+Jet clustering radius:  0.4
+Jet clustering algorithm:  antikt
+Jet clustering radius:  0.4
+hgpflow
+Jet clustering algorithm:  antikt
+Jet clustering radius:  0.4
+Jet clustering algorithm:  antikt
+Jet clustering radius:  0.4
+Jet clustering algorithm:  antikt
+Jet clustering radius:  0.4
+Jet clustering algorithm:  antikt
+Jet clustering radius:  0.4
+Jet clustering algorithm:  antikt
+Jet clustering radius:  0.4
+Jet clustering algorithm:  antikt
+Jet clustering radius:  0.4
+Jet clustering algorithm:  antikt
+Jet clustering radius:  0.4
+Jet clustering algorithm:  antikt
+Jet clustering radius:  0.4
+Jet clustering algorithm:  antikt
+Jet clustering radius:  0.4
+Jet clustering algorithm:  antikt
+Jet clustering radius:  0.4
+Jet clustering algorithm:  antikt
+Jet clustering radius:  0.4
+Jet clustering algorithm:  antikt
+Jet clustering radius:  0.4
+Jet clustering algorithm:  antikt
+Jet clustering radius:  0.4
+Jet clustering algorithm:  antikt
+Jet clustering radius:  0.4
+Jet clustering algorithm:  antikt
+Jet clustering radius:  0.4
+Jet clustering algorithm:  antikt
+Jet clustering radius:  0.4
+tagged 99291 truth jets with .llp_frac (Lxy > 10 mm = LLP-origin)
+tagged truth-jet decay regions: {'tracker': 69897, 'calo': 8366, 'beyond': 2775, 'no-LLP': 18253}
+--- hgpflow | LLP: llp_frac >= 0.9 | prompt: llp_frac < 0.1 | dR < 0.1 | pT > 10, |eta| < 2.5 ---
+    region       N  eff (momentum axis)   eff (flight dir)
+    prompt   14923               92.4%                --
+     mixed   14383               52.0%             21.9%
+   tracker   46659               25.3%              4.2%
+      calo    6359                0.9%             26.9%
+    beyond    2100                0.1%              0.1%
+--- hgpflow | LLP: llp_frac >= 0.9 | prompt: llp_frac < 0.1 | dR < 0.2 | pT > 10, |eta| < 2.5 ---
+    region       N  eff (momentum axis)   eff (flight dir)
+    prompt   14923               96.4%                --
+     mixed   14383               64.2%             36.1%
+   tracker   46659               43.5%             11.5%
+      calo    6359                2.4%             33.2%
+    beyond    2100                0.3%              0.3%
+--- ppflow | LLP: llp_frac >= 0.9 | prompt: llp_frac < 0.1 | dR < 0.1 | pT > 10, |eta| < 2.5 ---
+    region       N  eff (momentum axis)   eff (flight dir)
+    prompt   14923               91.1%                --
+     mixed   14383               50.7%             20.8%
+   tracker   46659               24.5%              3.9%
+      calo    6359                0.8%             22.8%
+    beyond    2100                0.1%              0.1%
+--- ppflow | LLP: llp_frac >= 0.9 | prompt: llp_frac < 0.1 | dR < 0.2 | pT > 10, |eta| < 2.5 ---
+    region       N  eff (momentum axis)   eff (flight dir)
+    prompt   14923               95.9%                --
+     mixed   14383               62.3%             34.8%
+   tracker   46659               40.9%             10.7%
+      calo    6359                2.1%             28.6%
+    beyond    2100                0.2%              0.2%

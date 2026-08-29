@@ -298,3 +298,153 @@ def llp_frac_summary(perf, cuts=(0.1, 0.5, 0.9)):
     for c in cuts:
         print(f"  llp_frac >= {c:.2f}: {(fracs >= c).sum():6d} jets ({(fracs >= c).mean():.1%})")
     return fracs
+
+
+# --- decay-region tagging and region-aware efficiency (LLP_jet_findings.md section 10) ---
+# Detector envelope, determined empirically from the stored calo extrapolation
+# (see notebooks/cocoa/llp_studies/calo_geometry.py):
+_R_ECAL, _Z_ECAL = 1496.5, 3220.0   # calorimeter inner faces = tracker-volume boundary [mm]
+_R_OUT, _Z_OUT = 3825.0, 7127.0     # outer extent of the calorimeter layers [mm]
+
+
+def _delta_R(eta1, phi1, eta2, phi2):
+    dphi = abs(phi1 - phi2)
+    if dphi > np.pi:
+        dphi = 2 * np.pi - dphi
+    return float(np.hypot(eta1 - eta2, dphi))
+
+
+def tag_truth_jets_decay_region(perf):
+    """Store the LLP decay vertex and its detector region on every truth jet.
+
+    Per jet (pT-weighted mean production vertex of its LLP-origin constituents, mm):
+      .decay_vtx    -- (x, y, z), or None for jets with no LLP constituent
+      .decay_d3     -- 3D distance of that vertex from the origin
+      .decay_region -- 'tracker' | 'calo' | 'beyond' | None
+      .flight_eta / .flight_phi -- direction of the origin->vertex line (the A0
+                       flight direction; the correct reference axis for 'calo' jets)
+
+    Classification is FULL 3D (the HSS sample is strongly forward; a transverse-only
+    test misclassifies endcap decays -- see LLP_jet_findings.md, header callout).
+    Requires: PerformanceCOCOA(..., llp_lxy_mm=<mm>), compute_jets(...,
+    store_constituent_idxs=True), and tag_truth_jets_llp(perf) run first.
+    """
+    for key in ('particle_prod_x', 'particle_prod_y', 'particle_prod_z'):
+        if key not in perf.truth_dict:
+            raise RuntimeError("production vertex not loaded -- rebuild PerformanceCOCOA "
+                               "with llp_lxy_mm=<mm> (reader keeps prod_x/y/z aligned)")
+    px_all = perf.truth_dict['particle_prod_x']
+    py_all = perf.truth_dict['particle_prod_y']
+    pz_all = perf.truth_dict['particle_prod_z']
+    pt_all = perf.truth_dict['particle_pt']
+    llp_all = perf.truth_dict['particle_llp_origin']
+
+    counts = {'tracker': 0, 'calo': 0, 'beyond': 0, None: 0}
+    for ev, jets in enumerate(perf.truth_dict['truth_jets']):
+        px, py, pz = px_all[ev], py_all[ev], pz_all[ev]
+        pts, llp = pt_all[ev], llp_all[ev]
+        for j in jets:
+            if getattr(j, 'llp_frac', None) is None:
+                raise RuntimeError("run tag_truth_jets_llp(perf) first")
+            idxs = j.constituent_idxs
+            lm = llp[idxs]
+            if not lm.any():
+                j.decay_vtx = None
+                j.decay_d3 = 0.0
+                j.decay_region = None
+                j.flight_eta = j.flight_phi = None
+                counts[None] += 1
+                continue
+            w = pts[idxs][lm]
+            vx = float(np.average(px[idxs][lm], weights=w))
+            vy = float(np.average(py[idxs][lm], weights=w))
+            vz = float(np.average(pz[idxs][lm], weights=w))
+            lxy, az = np.hypot(vx, vy), abs(vz)
+            if lxy < _R_ECAL and az < _Z_ECAL:
+                region = 'tracker'
+            elif lxy < _R_OUT and az < _Z_OUT:
+                region = 'calo'
+            else:
+                region = 'beyond'
+            j.decay_vtx = (vx, vy, vz)
+            j.decay_d3 = float(np.sqrt(vx**2 + vy**2 + vz**2))
+            j.decay_region = region
+            j.flight_eta = float(np.arcsinh(vz / max(lxy, 1e-9)))
+            j.flight_phi = float(np.arctan2(vy, vx))
+            counts[region] += 1
+    print('tagged truth-jet decay regions:',
+          {k if k else 'no-LLP': v for k, v in counts.items()})
+
+
+def llp_efficiency_by_region(perf, comp='hgpflow', frac=0.9, dr_cut=0.1,
+                             pt_min=10, eta_max=2.5, prompt_frac=0.1, verbose=True):
+    """Truth-jet-centric matching efficiency split by decay region, scored against
+    BOTH candidate references: the jet momentum axis, and the A0 flight direction.
+
+    A truth jet counts as matched if ANY reco jet of the chosen collection lies
+    within dr_cut of the reference axis. LLP jets (llp_frac >= frac) are split by
+    .decay_region. Below that, jets are split into a CLEAN prompt control
+    (llp_frac < prompt_frac, default 0.1 -- matching the section 6.4 convention)
+    and a 'mixed' row (prompt_frac <= llp_frac < frac).
+
+    Keeping prompt and mixed separate matters: an earlier version lumped
+    everything below `frac` into one 'prompt' row, which absorbed the partially
+    displaced jets and understated true prompt performance (72.6% for the blend
+    vs the clean control). Do not compare a blended row against section 6.4's
+    llp_frac < 0.1 numbers.
+
+    Expectation from the truth-level study (LLP_jet_findings.md section 10):
+    'tracker' jets score on the momentum axis; 'calo' jets score much better on
+    the flight direction (reference change, 28.4% -> 47.5% at truth level);
+    'beyond' jets deposit nothing and should sit near zero on both.
+
+    comp: 'hgpflow' | 'proxy' | 'ppflow'.
+    Requires tag_truth_jets_llp(perf) and tag_truth_jets_decay_region(perf).
+    Returns {region: {n, eff_mom, eff_flight}} (eff_flight is None for prompt).
+    """
+    loc = {'hgpflow': (perf.hgpflow_dict, 'jets'),
+           'proxy': (perf.hgpflow_dict, 'proxy_jets'),
+           'ppflow': (perf.truth_dict, 'ppflow_jets')}
+    d, key = loc[comp]
+    if key not in d:
+        raise RuntimeError(f"{key} not found -- call perf.compute_jets(...) first"
+                           + (" (truth file has no pflow_* branches)" if comp == 'ppflow' else ""))
+    reco_ev = d[key]
+
+    acc = {}
+    for tjets, rjets in zip(perf.truth_dict['truth_jets'], reco_ev):
+        for t in tjets:
+            if t.pt < pt_min or abs(t.eta) >= eta_max:
+                continue
+            if t.llp_frac >= frac:
+                region = t.decay_region
+                if region is None:      # LLP by fraction but no LLP constituent: skip
+                    continue
+            elif t.llp_frac < prompt_frac:
+                region = 'prompt'       # clean control (matches the section 6.4 convention)
+            else:
+                region = 'mixed'        # partially displaced -- kept OUT of the control
+            a = acc.setdefault(region, [0, 0, 0])
+            a[0] += 1
+            if any(_delta_R(t.eta, t.phi, r.eta, r.phi) < dr_cut for r in rjets):
+                a[1] += 1
+            # flight direction exists for anything with an LLP constituent (mixed included)
+            if getattr(t, 'flight_eta', None) is not None:
+                if any(_delta_R(t.flight_eta, t.flight_phi, r.eta, r.phi) < dr_cut for r in rjets):
+                    a[2] += 1
+
+    out = {}
+    if verbose:
+        print(f"--- {comp} | LLP: llp_frac >= {frac} | prompt: llp_frac < {prompt_frac} | "
+              f"dR < {dr_cut} | pT > {pt_min}, |eta| < {eta_max} ---")
+        print(f"{'region':>10} {'N':>7} {'eff (momentum axis)':>20} {'eff (flight dir)':>18}")
+    for region in ('prompt', 'mixed', 'tracker', 'calo', 'beyond'):
+        if region not in acc:
+            continue
+        n, m_mom, m_fl = acc[region]
+        out[region] = dict(n=n, eff_mom=m_mom / n if n else np.nan,
+                           eff_flight=(m_fl / n if n else np.nan) if region != 'prompt' else None)
+        if verbose:
+            fl = f"{out[region]['eff_flight']:>17.1%}" if out[region]['eff_flight'] is not None else f"{'--':>17}"
+            print(f"{region:>10} {n:>7} {out[region]['eff_mom']:>19.1%} {fl}")
+    return out

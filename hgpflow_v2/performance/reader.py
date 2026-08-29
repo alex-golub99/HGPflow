@@ -105,7 +105,10 @@ def load_truth_cocoa(truth_path, topo=False, positional_event_numbers=False,
     llp_lxy_mm: if set, tag each truth particle as LLP-origin when its production
     transverse displacement Lxy = sqrt(prod_x^2 + prod_y^2) > llp_lxy_mm. The flag
     (truth_dict['particle_llp_origin']) rides through the SAME fiducial cut as the
-    kinematics, so it stays index-aligned for per-jet LLP-fraction tagging.'''
+    kinematics, so it stays index-aligned for per-jet LLP-fraction tagging.
+    The production vertex itself (particle_prod_x/y/z, in mm) is also kept,
+    index-aligned through the same cut -- needed for per-jet decay-region tagging
+    (tag_truth_jets_decay_region in llp_helper).'''
     scale_E_pT=1e-3
     print("\033[96m" + f"E, pT will be scaled by {scale_E_pT}" + "\033[0m")
 
@@ -122,7 +125,16 @@ def load_truth_cocoa(truth_path, topo=False, positional_event_numbers=False,
     if has_pflow:
         vars_to_load += ['pflow_e', 'pflow_eta', 'pflow_phi', 'pflow_charge', 'pflow_px', 'pflow_py']
     if llp_lxy_mm is not None:
-        vars_to_load += ['particle_prod_x', 'particle_prod_y']
+        vars_to_load += ['particle_prod_x', 'particle_prod_y', 'particle_prod_z']
+    # calorimeter-extrapolated angles: where each truth particle's ENERGY lands, as opposed to
+    # where its momentum points. Needed for the reference-free energy-overlap match. Guarded --
+    # some productions lack them.
+    has_extrap = 'particle_eta_extrap_calo' in tree.keys()
+    if llp_lxy_mm is not None and has_extrap:
+        vars_to_load += ['particle_eta_extrap_calo', 'particle_phi_extrap_calo']
+    elif llp_lxy_mm is not None:
+        print("\033[96m" + "no particle_*_extrap_calo branches -> overlap matching unavailable"
+              + "\033[0m")
 
     for var in tqdm(vars_to_load, desc="Reading truth tree...", total=len(vars_to_load)):
         truth_dict[var] = tree[var].array(library='np')
@@ -154,8 +166,8 @@ def load_truth_cocoa(truth_path, topo=False, positional_event_numbers=False,
         truth_dict['particle_charge'][i] = np.array([1 if x <= 2 else 0 for x in truth_dict['particle_class'][i]])
 
     # delete unnecessary variables
-    vars_to_delete = (['particle_pdgid'] + (['pflow_px', 'pflow_py'] if has_pflow else [])
-                      + (['particle_prod_x', 'particle_prod_y'] if llp_lxy_mm is not None else []))
+    # particle_prod_x/y/z are kept (in mm): decay-region tagging needs the vertex itself
+    vars_to_delete = (['particle_pdgid'] + (['pflow_px', 'pflow_py'] if has_pflow else []))
     for var in vars_to_delete:
         del truth_dict[var]
     gc.collect()
@@ -163,7 +175,10 @@ def load_truth_cocoa(truth_path, topo=False, positional_event_numbers=False,
     # particle vars that must survive the fiducial cut together (index-aligned)
     particle_cut_vars = ['particle_pt', 'particle_eta', 'particle_phi', 'particle_e', 'particle_class']
     if llp_lxy_mm is not None:
-        particle_cut_vars.append('particle_llp_origin')
+        particle_cut_vars += ['particle_llp_origin',
+                              'particle_prod_x', 'particle_prod_y', 'particle_prod_z']
+        if has_extrap:
+            particle_cut_vars += ['particle_eta_extrap_calo', 'particle_phi_extrap_calo']
 
     # fiducial cuts
     for i in tqdm(range(n_events), desc="Applying fiducial cuts...", total=n_events):
